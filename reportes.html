@@ -829,8 +829,27 @@
       // ==========================================
       // CONFIGURACIÓN Y VARIABLES GLOBALES
       // ==========================================
-      
-      const API_URL = "http://localhost:3000/api";
+
+      const API_ORIGIN = (() => {
+        try {
+          const { protocol, hostname, port } = window.location;
+          if (protocol === "http:" || protocol === "https:") {
+            if (String(port || "") === "3000") {
+              return "";
+            }
+            const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(
+              String(hostname || "").toLowerCase()
+            );
+            return isLocalHost ? `${protocol}//${hostname}:3000` : window.location.origin;
+          }
+        } catch (error) {
+          // ignore
+        }
+
+        return "http://localhost:3000";
+      })();
+
+      const API_URL = API_ORIGIN ? `${API_ORIGIN}/api` : "/api";
       let chartsInstances = {};
       let chartsMeta = [];
       let currentFilters = {};
