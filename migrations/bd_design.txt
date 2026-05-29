@@ -1,0 +1,29 @@
+Transaccion Bancaria
+id_transaccion
+fecha
+nombre
+descripción
+referencia (opcional)
+documento
+valor (debe sumar el total de los valores de las facturas ligadas a la transacción)
+moneda
+soporte (bool)
+
+
+Factura  (una transacción puede estar atada a muchas facturas)
+id_factura
+id_transaccion
+valor_factura 
+
+
+Venta
+id_venta
+tipo_transaccion — VARCHAR(100)
+comprobante — VARCHAR(50)
+fecha_elaboracion — DATE
+identificacion — VARCHAR(50)
+sucursal — INT
+cliente — VARCHAR(150)
+estado_envio_correo — VARCHAR(50)
+total — LONG
+moneda — VARCHAR(10)

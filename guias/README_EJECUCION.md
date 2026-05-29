@@ -38,10 +38,12 @@ Ejecutar el script SQL en tu instancia de Neon:
 
 ```bash
 # En pgAdmin o línea de comandos:
-psql postgresql://neondb_owner:npg_MwVj7NbYqF5v@ep-lively-mud-amoa3kzs-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require < 001_init_schema.sql
-psql postgresql://neondb_owner:npg_MwVj7NbYqF5v@ep-lively-mud-amoa3kzs-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require < 002_auth_users.sql
-psql postgresql://neondb_owner:npg_MwVj7NbYqF5v@ep-lively-mud-amoa3kzs-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require < 003_currency_conversion.sql
+psql "$DATABASE_URL" < 001_init_schema.sql
+psql "$DATABASE_URL" < 002_auth_users.sql
+psql "$DATABASE_URL" < 003_currency_conversion.sql
 ```
+
+Si prefieres, también puedes usar `NEON_DATABASE_URL` en lugar de `DATABASE_URL`.
 
 Esto creará las tablas:
 - `cliente`

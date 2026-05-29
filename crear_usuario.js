@@ -19,16 +19,6 @@ const resolveDatabaseUrl = () => {
     return envUrl;
   }
 
-  try {
-    const serverSource = fs.readFileSync(path.join(__dirname, "server.js"), "utf8");
-    const match = serverSource.match(/connectionString:\s*["'`]([^"'`]+)["'`]/);
-    if (match?.[1]) {
-      return match[1];
-    }
-  } catch (_) {
-    // ignore
-  }
-
   return null;
 };
 

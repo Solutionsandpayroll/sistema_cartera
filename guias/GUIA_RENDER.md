@@ -13,7 +13,7 @@ Esta guía explica cómo publicar el sistema en Render usando Neon como base de 
 
 El backend actual funciona como un servidor Express tradicional y sirve el frontend desde el mismo proceso. Eso sí funciona en Render.
 
-La base de datos en el código debe leerse desde una variable de entorno. Si todavía tienes una cadena fija dentro de `server.js`, cámbiala por `process.env.DATABASE_URL` o `process.env.NEON_DATABASE_URL` antes de publicar.
+La base de datos se lee desde variables de entorno. No debe quedar ninguna cadena de Neon fija dentro de `server.js` ni en scripts auxiliares.
 
 ## 3. Variables de entorno en Render
 
@@ -24,6 +24,8 @@ En tu servicio web de Render configura estas variables:
 - `DATABASE_URL` o `NEON_DATABASE_URL` con la cadena de conexión de Neon.
 
 Si usas solo una, mantén una sola convención en todo el proyecto.
+
+Para el script `crear_usuario.js`, usa la misma variable de entorno antes de ejecutarlo.
 
 ## 4. Crear el servicio en Render
 

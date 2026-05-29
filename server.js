@@ -1,9 +1,45 @@
 const express = require("express");
 const { Pool } = require("pg");
 const cors = require("cors");
+const fs = require("fs");
 const path = require("path");
 const ExcelJS = require("exceljs");
 const crypto = require("crypto");
+
+const loadEnvFile = (filePath) => {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, "utf8");
+  content.split(/\r?\n/).forEach((line) => {
+    const trimmed = String(line || "").trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return;
+    }
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex <= 0) {
+      return;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    let value = trimmed.slice(separatorIndex + 1).trim();
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    if (typeof process.env[key] === "undefined" || process.env[key] === "") {
+      process.env[key] = value;
+    }
+  });
+};
+
+loadEnvFile(path.join(__dirname, ".env"));
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -265,8 +301,14 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname)));
 
 // Configuración de conexión a Neon
+const DATABASE_URL = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
+
+if (!DATABASE_URL) {
+  throw new Error("Falta DATABASE_URL o NEON_DATABASE_URL en el entorno");
+}
+
 const pool = new Pool({
-  connectionString: "postgresql://neondb_owner:npg_MwVj7NbYqF5v@ep-lively-mud-amoa3kzs-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+  connectionString: DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
   }
