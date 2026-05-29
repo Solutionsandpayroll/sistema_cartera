@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema Cartera | Transacciones</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,500,0,0"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: "#102a47",
+              accent: "#e51148",
+              surface: "#f6f7f8",
+              darkbg: "#13191f"
+            }
+          }
+        }
+      };
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="bg-surface text-slate-800">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <div class="brand">
+            <div class="brand-mark">SC</div>
+            <div>
+              <p class="brand-title">Sistema Cartera</p>
+              <p class="brand-subtitle">Panel operativo</p>
+            </div>
+          </div>
+
+          <nav class="menu" aria-label="Navegacion principal">
+            <a class="menu-item" href="home.html">
+              <span class="material-symbols-outlined">home</span>
+              <span>Home</span>
+            </a>
+            <a class="menu-item" href="ventas.html">
+              <span class="material-symbols-outlined">payments</span>
+              <span>Ventas</span>
+            </a>
+            <a class="menu-item is-active" href="transacciones.html">
+              <span class="material-symbols-outlined">receipt_long</span>
+              <span>Transacciones</span>
+            </a>
+            <a class="menu-item" href="reportes.html">
+              <span class="material-symbols-outlined">bar_chart</span>
+              <span>Reportes</span>
+            </a>
+            <a class="menu-item" href="backup.html">
+              <span class="material-symbols-outlined">inventory_2</span>
+              <span>Backup</span>
+            </a>
+          </nav>
+        </div>
+
+        <div class="session-box">
+          <div class="session-top">
+            <div class="session-avatar" aria-hidden="true">
+              <span class="material-symbols-outlined">person</span>
+            </div>
+            <p class="session-user is-hidden" id="session-user"></p>
+            <p class="session-role is-hidden" id="session-role">Operador</p>
+          </div>
+          <button class="session-action" id="btn-logout" type="button">
+            <span class="material-symbols-outlined">logout</span>
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <h1>Transacciones</h1>
+            <p>Carga masiva de abonos por cliente y aplicacion a ventas existentes.</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn-secondary" id="open-modal" type="button">
+              <span class="material-symbols-outlined">add_circle</span>
+              Nueva planilla
+            </button>
+             <!-- Removed Exportar reporte button -->
+          </div>
+        </header>
+
+        <section class="content-wrap" id="transacciones-page">
+          <div class="kpi-grid kpi-grid-transactions">
+            <article class="kpi-card">
+              <p class="kpi-label">Transacciones registradas</p>
+              <p class="kpi-value" id="tx-kpi-total">0</p>
+              <p class="kpi-meta">Incluye aplicadas y no aplicadas</p>
+            </article>
+            <article class="kpi-card">
+              <p class="kpi-label">Total aplicado a ventas</p>
+              <p class="kpi-value" id="tx-kpi-aplicado">$ 0</p>
+              <p class="kpi-meta">Aplicacion acumulada</p>
+            </article>
+            <article class="kpi-card">
+              <p class="kpi-label">Saldo positivo clientes</p>
+              <p class="kpi-value" id="tx-kpi-saldo">$ 0</p>
+              <p class="kpi-meta">Sobrepagos y abonos pendientes</p>
+            </article>
+          </div>
+
+          <div class="data-card fade-in-up">
+            <div class="data-card-header">
+              <div>
+                <h2>Transacciones registradas</h2>
+                <p>Consulta de abonos y su estado de aplicacion a ventas.</p>
+              </div>
+              <div class="filters">
+                <input
+                  type="search"
+                  id="tx-filter-global"
+                  placeholder="Buscar (ID, cliente, NIT, banco, moneda, referencia, descripción...)"
+                  aria-label="Buscar transacciones"
+                />
+              </div>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="data-table" id="tx-table">
+                <thead id="tx-table-head"></thead>
+                <tbody id="tx-table-body">
+                  <tr>
+                    <td class="ventas-empty" colspan="11">Cargando transacciones...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="data-card fade-in-up" style="margin-top: 1rem;">
+            <div class="data-card-header">
+              <div>
+                <h2>Bandeja de transacciones fantasma</h2>
+                <p>Filas recibidas sin cliente ni venta para clasificar y convertir en transacciones reales.</p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; justify-content: flex-end;">
+                <select id="tx-ghost-filter" class="filter-select" style="min-width: 180px;">
+                  <option value="pendiente">Pendientes</option>
+                  <option value="resuelto">Resueltas</option>
+                  <option value="descartado">Descartadas</option>
+                  <option value="all">Todas</option>
+                </select>
+                <div class="kpi-pill" style="white-space: nowrap;">
+                  <span id="tx-ghost-count">0</span> registros
+                </div>
+              </div>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="data-table" id="tx-ghost-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Valor</th>
+                    <th>Moneda</th>
+                    <th>Banco</th>
+                    <th>Referencia</th>
+                    <th>Descripción</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="tx-ghost-table-body">
+                  <tr>
+                    <td class="ventas-empty" colspan="8">Cargando transacciones fantasma...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal" id="crud-modal" aria-hidden="true" role="dialog" aria-labelledby="modal-title">
+      <div class="modal-card modal-card-xl">
+        <button class="modal-close" type="button" id="close-modal" aria-label="Cerrar modal">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <h2 id="modal-title">Planilla de transacciones</h2>
+        <p>
+          Crea varias transacciones en modo columnar. Selecciona una venta existente o
+          usa "Venta no registrada" para guardar el abono al cliente. Si la moneda de la
+          transacción y la de la venta no coinciden, el sistema pedirá la conversión del día.
+        </p>
+
+        <div class="tx-toolbar">
+          <div class="tx-toolbar-left">
+            <button class="btn-secondary" type="button" id="tx-add-row">
+              <span class="material-symbols-outlined">add</span>
+              Agregar fila
+            </button>
+            <button class="btn-secondary" type="button" id="tx-add-5-rows">
+              <span class="material-symbols-outlined">playlist_add</span>
+              Agregar 5 filas
+            </button>
+            <button class="btn-secondary" type="button" id="tx-clear-rows">
+              <span class="material-symbols-outlined">delete_sweep</span>
+              Limpiar
+            </button>
+          </div>
+          <p id="tx-plan-status">Prepara las filas y luego guarda en base de datos.</p>
+        </div>
+
+        <div class="tx-plan-total" aria-live="polite">
+          <p class="tx-plan-total-label">Total listo para guardar</p>
+          <p class="tx-plan-total-value" id="tx-plan-total-preview">0</p>
+          <p class="tx-plan-total-meta" id="tx-plan-total-meta">0 filas válidas</p>
+          <div class="tx-plan-total-breakdown" id="tx-plan-total-breakdown"></div>
+        </div>
+
+        <div class="tx-grid-wrap">
+          <table class="tx-grid-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Venta destino</th>
+                <th>NIT cliente</th>
+                <th>Cliente</th>
+                <th>Valor</th>
+                <th>Moneda</th>
+                <th>Banco</th>
+                <th>Referencia</th>
+                <th>Descripcion</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tx-plan-body"></tbody>
+          </table>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" type="button" id="tx-cancel-modal">Cancelar</button>
+          <button class="btn-primary" type="button" id="tx-save-plan">Guardar transacciones</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="tx-results-modal" aria-hidden="true" role="dialog" aria-labelledby="tx-results-title">
+      <div class="modal-card">
+        <button class="modal-close" type="button" id="tx-close-results" aria-label="Cerrar modal">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <h2 id="tx-results-title">Resultado de la carga</h2>
+        <div class="results-summary">
+          <div class="result-stat">
+            <span class="result-label">Total</span>
+            <span class="result-value" id="tx-result-total">0</span>
+          </div>
+          <div class="result-stat">
+            <span class="result-label">Guardadas</span>
+            <span class="result-value success" id="tx-result-ok">0</span>
+          </div>
+          <div class="result-stat">
+            <span class="result-label">Errores</span>
+            <span class="result-value error" id="tx-result-error">0</span>
+          </div>
+        </div>
+        <div class="import-logs">
+          <div id="tx-result-log" style="max-height: 260px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 12px; background: #f9f9f9;"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-primary" type="button" id="tx-results-ok">Aceptar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="tx-ghost-modal" aria-hidden="true" role="dialog" aria-labelledby="tx-ghost-title">
+      <div class="modal-card modal-card-xl">
+        <button class="modal-close" type="button" id="tx-ghost-close" aria-label="Cerrar modal">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <h2 id="tx-ghost-title">Resolver transacción fantasma</h2>
+        <p id="tx-ghost-summary">Selecciona el cliente y la venta para convertir el pendiente en una transacción real.</p>
+
+        <div class="dashboard-body" style="grid-template-columns: 1fr 1fr; margin-top: 1rem;">
+          <section class="dashboard-left">
+            <h3>Resumen del pendiente</h3>
+            <div style="display: grid; gap: 0.8rem; font-size: 0.9rem;">
+              <div><strong>Fecha:</strong> <span id="tx-ghost-fecha"></span></div>
+              <div><strong>Valor:</strong> <span id="tx-ghost-valor"></span></div>
+              <div><strong>Moneda:</strong> <span id="tx-ghost-moneda"></span></div>
+              <div><strong>Banco:</strong> <span id="tx-ghost-banco"></span></div>
+              <div><strong>Referencia:</strong> <span id="tx-ghost-referencia"></span></div>
+              <div><strong>Descripción:</strong> <span id="tx-ghost-descripcion"></span></div>
+            </div>
+          </section>
+
+          <section class="dashboard-right">
+            <h3>Asignación</h3>
+            <div style="display: grid; gap: 0.85rem; margin-top: 0.75rem;">
+              <div>
+                <label class="filter-label">Cliente</label>
+                <select id="tx-ghost-cliente" class="filter-select"></select>
+              </div>
+              <div>
+                <label class="filter-label">Venta</label>
+                <select id="tx-ghost-venta" class="filter-select"></select>
+              </div>
+              <div id="tx-ghost-rate-wrap" class="hidden">
+                <label class="filter-label">Tasa de conversión</label>
+                <input id="tx-ghost-rate" type="number" min="0" step="0.000001" class="filter-input" placeholder="Ej: 4000" />
+              </div>
+              <div>
+                <label class="filter-label">Observaciones</label>
+                <textarea id="tx-ghost-notas" class="filter-input" rows="3" placeholder="Opcional"></textarea>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" type="button" id="tx-ghost-cancel">Cancelar</button>
+          <button class="btn-primary" type="button" id="tx-ghost-resolve">Resolver y aplicar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true">
+      <span class="material-symbols-outlined">download_done</span>
+      <div>
+        <p>Reporte listo para descarga</p>
+        <small>La exportacion visual se completo correctamente.</small>
+      </div>
+    </div>
+
+    <!-- Modal: Detalle de Transacción -->
+    <div class="modal" id="tx-detail-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="tx-detail-title">
+      <div class="modal-card modal-card-xl dashboard-modal-card">
+        <button class="modal-close" type="button" id="close-tx-detail" aria-label="Cerrar modal">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <h2 id="tx-detail-title">Detalle de la Transacción</h2>
+        <p id="tx-detail-subtitle"></p>
+
+        <div class="dashboard-body" style="grid-template-columns: 1fr 1fr;">
+          <section class="dashboard-left">
+            <h3>Datos principales</h3>
+            <div style="display: grid; gap: 0.8rem; font-size: 0.9rem;">
+              <div><strong>Fecha:</strong> <span id="tx-detail-fecha"></span></div>
+              <div><strong>Cliente:</strong> <span id="tx-detail-cliente"></span></div>
+              <div><strong>Valor:</strong> <span id="tx-detail-valor"></span></div>
+              <div><strong>Moneda:</strong> <span id="tx-detail-moneda"></span></div>
+              <div><strong>Tasa conversión:</strong> <span id="tx-detail-tipo-cambio"></span></div>
+              <div><strong>Moneda referencia:</strong> <span id="tx-detail-moneda-referencia"></span></div>
+              <div><strong>Equivalente:</strong> <span id="tx-detail-valor-equivalente"></span></div>
+              <div><strong>Banco:</strong> <span id="tx-detail-banco"></span></div>
+              <div><strong>Referencia:</strong> <span id="tx-detail-referencia"></span></div>
+              <div><strong>Documento:</strong> <span id="tx-detail-documento"></span></div>
+              <div><strong>Soporte:</strong> <span id="tx-detail-soporte"></span></div>
+            </div>
+          </section>
+
+          <section class="dashboard-right">
+            <h3>Descripción</h3>
+            <div id="tx-detail-descripcion" style="padding: 0.8rem; background: #f9fbfd; border-radius: 0.6rem; border: 1px solid #e6eef7; min-height: 120px; overflow-y: auto;"></div>
+          </section>
+        </div>
+        <h3 style="margin-top: 1rem;">Aplicaciones a ventas</h3>
+        <div class="table-wrap">
+          <table id="tx-detail-aplicaciones-table">
+            <thead><tr><th>ID Venta</th><th>Comprobante</th><th>Cliente Venta</th><th>Aplicado venta</th><th>Equiv. transacción</th><th>Tasa</th></tr></thead>
+            <tbody id="tx-detail-aplicaciones-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script src="auth-guard.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,2588 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema Cartera | Reportes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,500,0,0"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: "#102a47",
+              accent: "#e51148",
+              surface: "#f6f7f8",
+              darkbg: "#13191f"
+            },
+            animation: {
+              "fade-in": "fadeIn 0.6s ease-in",
+              "slide-up": "slideUp 0.5s ease-out",
+              "pulse-soft": "pulseSoft 2s ease-in-out infinite",
+              "slide-right": "slideRight 0.4s ease-out"
+            },
+            keyframes: {
+              fadeIn: {
+                "0%": { opacity: "0" },
+                "100%": { opacity: "1" }
+              },
+              slideUp: {
+                "0%": { transform: "translateY(20px)", opacity: "0" },
+                "100%": { transform: "translateY(0)", opacity: "1" }
+              },
+              pulseSoft: {
+                "0%, 100%": { opacity: "1" },
+                "50%": { opacity: "0.5" }
+              },
+              slideRight: {
+                "0%": { transform: "translateX(-20px)", opacity: "0" },
+                "100%": { transform: "translateX(0)", opacity: "1" }
+              }
+            }
+          }
+        }
+      };
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .session-box {
+        display: flex !important;
+      }
+
+      /* Animaciones avanzadas para reportes */
+      .report-panel {
+        @apply animate-fade-in;
+      }
+
+      .filter-card {
+        @apply transform transition-all duration-300 hover:shadow-lg;
+      }
+
+      .chart-container {
+        @apply animate-slide-up;
+        position: relative;
+        height: 400px;
+        margin: 1rem 0;
+      }
+
+      .stat-card {
+        @apply animate-slide-up;
+        background: linear-gradient(135deg, rgba(16, 42, 71, 0.05) 0%, rgba(229, 17, 72, 0.03) 100%);
+        border: 1px solid rgba(16, 42, 71, 0.1);
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: all 0.3s ease;
+      }
+
+      .stat-card:hover {
+        background: linear-gradient(135deg, rgba(16, 42, 71, 0.1) 0%, rgba(229, 17, 72, 0.08) 100%);
+        transform: translateY(-4px);
+        box-shadow: 0 12px 24px rgba(16, 42, 71, 0.1);
+      }
+
+      .stat-value {
+        font-size: 1.875rem;
+        font-weight: 800;
+        color: var(--primary);
+        margin: 0.5rem 0 0 0;
+      }
+
+      .filter-group {
+        margin-bottom: 1.5rem;
+      }
+
+      .filter-label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .filter-input,
+      .filter-select {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 1px solid #d9e0e8;
+        border-radius: 0.75rem;
+        font-size: 0.95rem;
+        font-family: inherit;
+        transition: all 0.2s ease;
+      }
+
+      .filter-input:focus,
+      .filter-select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(229, 17, 72, 0.1);
+      }
+
+      .filter-input::placeholder {
+        color: #94a3b8;
+      }
+
+      .btn-filter {
+        @apply w-full bg-gradient-to-r from-primary to-accent text-white font-bold py-2.5 px-4 rounded-lg transition-all duration-300 hover:shadow-lg active:scale-95;
+      }
+
+      .btn-reset {
+        @apply w-full bg-gray-200 text-gray-700 font-bold py-2.5 px-4 rounded-lg transition-all duration-300 hover:bg-gray-300;
+      }
+
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .data-table thead {
+        background: linear-gradient(90deg, #102a47, #1a3a5c);
+        color: white;
+        font-weight: 600;
+      }
+
+      .data-table th {
+        padding: 1rem;
+        text-align: left;
+        font-size: 0.875rem;
+        letter-spacing: 0.5px;
+      }
+
+      .data-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #e5eaf0;
+      }
+
+      .data-table tbody tr {
+        transition: all 0.2s ease;
+      }
+
+      .data-table tbody tr:hover {
+        background: rgba(16, 42, 71, 0.03);
+      }
+
+      .table-wrapper {
+        overflow-x: auto;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+
+      .loading-spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(16, 42, 71, 0.2);
+        border-top: 3px solid var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+
+      .badge-success {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .badge-warning {
+        background: #fef08a;
+        color: #854d0e;
+      }
+
+      .badge-danger {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+      }
+
+      .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+        gap: 2rem;
+        margin: 2rem 0;
+      }
+
+      @media (max-width: 1200px) {
+        .chart-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .no-data {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #94a3b8;
+      }
+
+      .no-data-icon {
+        font-size: 3rem;
+        color: #cbd5e1;
+        margin-bottom: 1rem;
+      }
+
+      .export-menu {
+        position: absolute;
+        background: white;
+        border: 1px solid #d9e0e8;
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        z-index: 100;
+        min-width: 200px;
+      }
+
+      .export-menu button {
+        display: block;
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: none;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+      }
+
+      .export-menu button:hover {
+        background: #f1f5f9;
+      }
+
+      .export-menu button:first-child {
+        border-radius: 0.75rem 0.75rem 0 0;
+      }
+
+      .export-menu button:last-child {
+        border-radius: 0 0 0.75rem 0.75rem;
+      }
+
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 200;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+
+      .modal-overlay.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .modal-content {
+        background: white;
+        border-radius: 1rem;
+        max-width: 600px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+        transform: scale(0.9);
+        transition: transform 0.3s ease;
+      }
+
+      .modal-overlay.active .modal-content {
+        transform: scale(1);
+      }
+
+      .modal-header {
+        padding: 2rem;
+        border-bottom: 1px solid #e5eaf0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .modal-body {
+        padding: 2rem;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: #e5eaf0;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 1rem 0;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), var(--primary));
+        animation: slideRight 1s ease-out forwards;
+      }
+    </style>
+  </head>
+  <body class="bg-surface text-slate-800">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <div class="brand">
+            <div class="brand-mark">SC</div>
+            <div>
+              <p class="brand-title">Sistema Cartera</p>
+              <p class="brand-subtitle">Panel operativo</p>
+            </div>
+          </div>
+
+          <nav class="menu" aria-label="Navegacion principal">
+            <a class="menu-item" href="home.html">
+              <span class="material-symbols-outlined">home</span>
+              <span>Home</span>
+            </a>
+            <a class="menu-item" href="ventas.html">
+              <span class="material-symbols-outlined">payments</span>
+              <span>Ventas</span>
+            </a>
+            <a class="menu-item" href="transacciones.html">
+              <span class="material-symbols-outlined">receipt_long</span>
+              <span>Transacciones</span>
+            </a>
+            <a class="menu-item is-active" href="reportes.html">
+              <span class="material-symbols-outlined">bar_chart</span>
+              <span>Reportes</span>
+            </a>
+            <a class="menu-item" href="backup.html">
+              <span class="material-symbols-outlined">inventory_2</span>
+              <span>Backup</span>
+            </a>
+          </nav>
+        </div>
+
+        <div class="session-box">
+          <div class="session-top">
+            <div class="session-avatar" aria-hidden="true">
+              <span class="material-symbols-outlined">person</span>
+            </div>
+            <p class="session-user is-hidden" id="session-user"></p>
+            <p class="session-role is-hidden" id="session-role">Operador</p>
+          </div>
+          <button class="session-action" id="btn-logout" type="button">
+            <span class="material-symbols-outlined">logout</span>
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <h1>Reportes Avanzados</h1>
+            <p>Análisis dinámico con filtros combinables y visualizaciones interactivas.</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn-primary" id="btn-export" type="button">
+              <span class="material-symbols-outlined">download</span>
+              Exportar
+            </button>
+          </div>
+        </header>
+
+        <section class="content-wrap">
+          <!-- Selector principal (cards) -->
+          <div class="report-panel mb-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 class="text-lg font-bold text-primary mb-4 flex items-center gap-2">
+                <span class="material-symbols-outlined">dashboard</span>
+                Vista de Reportes
+              </h2>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="report-mode-cards">
+                <button type="button" class="filter-card text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-accent" data-mode="ventas">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <p class="font-bold text-primary">Ventas</p>
+                      <p class="text-sm text-gray-600">Filtros por fecha, moneda, cliente y saldo pendiente.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-accent">shopping_bag</span>
+                  </div>
+                </button>
+
+                <button type="button" class="filter-card text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-accent" data-mode="transacciones">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <p class="font-bold text-primary">Transacciones</p>
+                      <p class="text-sm text-gray-600">Filtros por fecha, moneda y monto; identifica sin venta asociada.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-accent">payments</span>
+                  </div>
+                </button>
+
+                <button type="button" class="filter-card text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-accent" data-mode="bancos">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <p class="font-bold text-primary">Bancos</p>
+                      <p class="text-sm text-gray-600">Transacciones filtradas/agrupadas por banco.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-accent">account_balance</span>
+                  </div>
+                </button>
+
+                <button type="button" class="filter-card text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-accent" data-mode="clientes">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <p class="font-bold text-primary">Clientes</p>
+                      <p class="text-sm text-gray-600">Ventas, transacciones y saldos por cliente.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-accent">person</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel de filtros -->
+          <div class="report-panel mb-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div class="flex items-center justify-between gap-4 p-6 border-b border-gray-200">
+                <h2 class="text-lg font-bold text-primary flex items-center gap-2">
+                  <span class="material-symbols-outlined">tune</span>
+                  Filtros Dinámicos
+                </h2>
+
+                <button type="button" class="tab-button py-2 px-4 font-bold text-gray-600 hover:text-primary transition-all border-b-2 border-transparent" id="filters-toggle">
+                  <span class="inline-flex items-center gap-2">
+                    <span class="material-symbols-outlined" id="filters-toggle-icon">expand_less</span>
+                    <span id="filters-toggle-text">Contraer</span>
+                  </span>
+                </button>
+              </div>
+
+              <div class="p-6" id="filters-body">
+                <p class="text-sm text-gray-600 mb-4" id="mode-hint"></p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <div class="filter-group" data-filter="cliente">
+                  <label class="filter-label">Cliente</label>
+                  <select id="filter-cliente" class="filter-select">
+                    <option value="">Todos los clientes</option>
+                  </select>
+                </div>
+
+                <div class="filter-group" data-filter="moneda">
+                  <label class="filter-label">Moneda</label>
+                  <select id="filter-moneda" class="filter-select">
+                    <option value="">Todas las monedas</option>
+                  </select>
+                </div>
+
+                <div class="filter-group hidden" data-filter="banco">
+                  <label class="filter-label">Banco</label>
+                  <select id="filter-banco" class="filter-select">
+                    <option value="">Todos los bancos</option>
+                  </select>
+                </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="filter-group" data-filter="fecha_inicio">
+                  <label class="filter-label" id="filter-fecha-inicio-label">Fecha Inicio</label>
+                  <input type="date" id="filter-fecha-inicio" class="filter-input" />
+                </div>
+
+                <div class="filter-group" data-filter="fecha_fin" id="filter-fecha-fin-group">
+                  <label class="filter-label" id="filter-fecha-fin-label">Fecha Fin</label>
+                  <input type="date" id="filter-fecha-fin" class="filter-input" />
+                </div>
+                <div class="filter-group hidden" data-filter="slider">
+                  <label class="filter-label" id="filter-slider-label">Rango</label>
+                  <input type="range" id="filter-slider" class="w-full" min="0" max="100" value="0" step="1" />
+                  <div class="mt-3">
+                    <label class="filter-label">Valor exacto</label>
+                    <input type="number" id="filter-slider-input" class="filter-input" min="0" max="100" step="0.01" value="0" />
+                  </div>
+                  <div class="flex justify-between text-xs text-gray-500 mt-2">
+                    <span id="filter-slider-min">0</span>
+                    <span class="font-bold text-primary" id="filter-slider-value">0</span>
+                    <span id="filter-slider-max">100</span>
+                  </div>
+                </div>
+                </div>
+
+                <div class="flex gap-3">
+                <button class="btn-filter" id="btn-aplicar-filtros">
+                  <span class="inline-flex items-center gap-2">
+                    <span class="material-symbols-outlined">search</span>
+                    Aplicar Filtros
+                  </span>
+                </button>
+                <button class="btn-reset" id="btn-limpiar-filtros">
+                  <span class="inline-flex items-center gap-2">
+                    <span class="material-symbols-outlined">refresh</span>
+                    Limpiar
+                  </span>
+                </button>
+                </div>
+
+                <!-- Asignación MANUAL de saldos (solo Clientes) -->
+                <div class="mt-4 hidden" id="manual-apply-wrap">
+                  <div class="bg-surface border border-gray-200 rounded-xl p-4">
+                    <div class="flex items-start justify-between gap-3">
+                      <div>
+                        <p class="font-bold text-primary">Asignar saldo positivo (manual)</p>
+                        <p class="text-sm text-gray-600">Selecciona una transacción con saldo y una venta pendiente del cliente, y define el valor a aplicar.</p>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                      <div>
+                        <label class="filter-label">Transacción (con saldo)</label>
+                        <select id="manual-tx" class="filter-select"></select>
+                      </div>
+                      <div>
+                        <label class="filter-label">Venta (con saldo)</label>
+                        <select id="manual-venta" class="filter-select"></select>
+                      </div>
+                      <div>
+                        <label class="filter-label">Valor a aplicar</label>
+                        <input id="manual-valor" type="number" min="0" step="0.01" class="filter-input" placeholder="0" />
+                      </div>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row md:items-center gap-3 mt-4">
+                      <button class="btn-filter md:w-auto" id="btn-manual-aplicar" type="button" disabled>
+                        <span class="inline-flex items-center gap-2">
+                          <span class="material-symbols-outlined">done</span>
+                          Aplicar a esta venta
+                        </span>
+                      </button>
+                      <div class="text-sm text-gray-700 hidden" id="manual-apply-result"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Estadísticas generales (contexto de la búsqueda) -->
+                <div class="cards-grid mt-6" id="stats-container">
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-sm text-gray-600" id="stat-label-1">-</p>
+                        <p class="stat-value" id="stat-clientes">-</p>
+                      </div>
+                      <span class="material-symbols-outlined text-accent text-3xl">people</span>
+                    </div>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-sm text-gray-600" id="stat-label-2">-</p>
+                        <p class="stat-value" id="stat-ventas">-</p>
+                      </div>
+                      <span class="material-symbols-outlined text-accent text-3xl">shopping_cart</span>
+                    </div>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-sm text-gray-600" id="stat-label-3">-</p>
+                        <p class="stat-value" id="stat-monto-ventas">-</p>
+                      </div>
+                      <span class="material-symbols-outlined text-accent text-3xl">trending_up</span>
+                    </div>
+                  </div>
+
+                  <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="text-sm text-gray-600" id="stat-label-4">-</p>
+                        <p class="stat-value" id="stat-transacciones">-</p>
+                      </div>
+                      <span class="material-symbols-outlined text-accent text-3xl">receipt</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabla de datos -->
+          <div class="report-panel mb-6">
+            <h2 class="text-lg font-bold text-primary mb-6 flex items-center gap-2">
+              <span class="material-symbols-outlined">table_chart</span>
+              Datos Detallados
+            </h2>
+
+            <!-- Tabs para ventas/transacciones -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div class="flex border-b border-gray-200" id="detail-tabs-bar">
+                <button class="tab-button active flex-1 py-4 px-6 font-bold text-primary border-b-2 border-primary transition-all" data-tab="ventas">
+                  <span class="inline-flex items-center gap-2">
+                    <span class="material-symbols-outlined">shopping_bag</span>
+                    Ventas
+                  </span>
+                </button>
+                <button class="tab-button flex-1 py-4 px-6 font-bold text-gray-600 hover:text-primary transition-all" data-tab="transacciones">
+                  <span class="inline-flex items-center gap-2">
+                    <span class="material-symbols-outlined">payments</span>
+                    Transacciones
+                  </span>
+                </button>
+              </div>
+
+              <div id="tab-ventas" class="tab-content">
+                <div class="table-wrapper">
+                  <table class="data-table" id="tabla-ventas">
+                    <thead>
+                      <tr>
+                        <th>ID Venta</th>
+                        <th>Cliente</th>
+                        <th>NIT</th>
+                        <th>Fecha Elaboración</th>
+                        <th>Fecha Vencimiento</th>
+                        <th>Comprobante</th>
+                        <th>Tipo</th>
+                        <th>Moneda</th>
+                        <th>Total</th>
+                        <th>Aplicado</th>
+                        <th>Saldo</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tabla-ventas-body">
+                      <tr>
+                        <td colspan="12" class="no-data">
+                          <div class="no-data-icon">📊</div>
+                          <p>Selecciona filtros y aplica para ver datos</p>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div id="tab-transacciones" class="tab-content hidden">
+                <div class="table-wrapper">
+                  <table class="data-table" id="tabla-transacciones">
+                    <thead>
+                      <tr>
+                        <th>ID Transacción</th>
+                        <th>Cliente</th>
+                        <th>NIT</th>
+                        <th>Fecha</th>
+                        <th>Descripción</th>
+                        <th>Banco</th>
+                        <th>Moneda</th>
+                        <th>Valor</th>
+                        <th>Aplicado</th>
+                        <th>Saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tabla-transacciones-body">
+                      <tr>
+                        <td colspan="10" class="no-data">
+                          <div class="no-data-icon">📋</div>
+                          <p>Selecciona filtros y aplica para ver datos</p>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gráficos (al final) -->
+          <div class="report-panel">
+            <h2 class="text-lg font-bold text-primary mb-6 flex items-center gap-2">
+              <span class="material-symbols-outlined">analytics</span>
+              Visualizaciones Dinámicas
+            </h2>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6 hidden" id="charts-tabs-wrap">
+              <div class="flex flex-wrap border-b border-gray-200" id="charts-tabs"></div>
+            </div>
+
+            <div class="chart-grid" id="charts-grid"></div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-10 hidden" id="charts-empty">
+              <div class="no-data-icon">📈</div>
+              <p class="text-center text-gray-600">No hay gráficos para mostrar con los filtros actuales.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Modal de exportación a PDF -->
+    <div class="modal-overlay" id="export-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="text-xl font-bold text-primary">Exportar Reporte</h2>
+          <button class="btn-close" id="close-export-modal" type="button">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-6 text-gray-600">Exporta el reporte según tu búsqueda y el tipo seleccionado.</p>
+
+          <div class="mb-6">
+            <p class="text-sm font-semibold text-primary mb-3">Formato</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label class="flex items-center gap-3 cursor-pointer bg-surface border border-gray-200 rounded-xl px-4 py-3">
+                <input type="radio" name="export-format" value="pdf" checked />
+                <span class="font-semibold">PDF</span>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer bg-surface border border-gray-200 rounded-xl px-4 py-3">
+                <input type="radio" name="export-format" value="xlsx" />
+                <span class="font-semibold">Excel (XLSX)</span>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer bg-surface border border-gray-200 rounded-xl px-4 py-3">
+                <input type="radio" name="export-format" value="csv" />
+                <span class="font-semibold">CSV</span>
+              </label>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Nota: CSV solo permite Ventas o Transacciones (no ambos).</p>
+          </div>
+          
+          <div class="mb-6">
+            <div id="export-pdf-options">
+              <p class="text-sm font-semibold text-primary mb-3">Contenido (PDF)</p>
+              <p class="text-xs text-gray-500 mb-3">PDF siempre se genera en formato tabular horizontal (sin gráficas).</p>
+              <label class="flex items-center gap-3 mb-3 cursor-pointer">
+                <input type="checkbox" id="export-include-saldos" class="w-4 h-4" checked />
+                <span>Incluir saldos</span>
+              </label>
+              <label class="flex items-center gap-3 mb-3 cursor-pointer">
+                <input type="checkbox" id="export-include-totales" class="w-4 h-4" checked />
+                <span>Incluir totales al final</span>
+              </label>
+            </div>
+
+            <p class="text-sm font-semibold text-primary mb-3">Datos</p>
+            <label class="flex items-center gap-3 mb-3 cursor-pointer">
+              <input type="checkbox" id="export-tabla-ventas" class="w-4 h-4" checked />
+              <span>Ventas</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="export-tabla-transacciones" class="w-4 h-4" />
+              <span>Transacciones</span>
+            </label>
+          </div>
+
+          <div id="export-progress" style="display: none;">
+            <p class="text-sm text-gray-600 mb-2">Generando reporte...</p>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div id="export-result" class="mt-6 hidden">
+            <div class="bg-surface border border-gray-200 rounded-xl p-4">
+              <p class="font-semibold text-primary mb-2">Reporte listo para descarga</p>
+              <a id="export-download-link" href="#" class="text-accent font-bold underline">Descargar</a>
+            </div>
+          </div>
+
+          <div class="flex gap-3">
+            <button class="btn-filter flex-1" id="btn-generar-export">
+              <span class="inline-flex items-center gap-2">
+                <span class="material-symbols-outlined">picture_as_pdf</span>
+                Generar
+              </span>
+            </button>
+            <button class="btn-reset flex-1" id="btn-cerrar-modal">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="auth-guard.js"></script>
+    <script>
+      // ==========================================
+      // CONFIGURACIÓN Y VARIABLES GLOBALES
+      // ==========================================
+      
+      const API_URL = "http://localhost:3000/api";
+      let chartsInstances = {};
+      let chartsMeta = [];
+      let currentFilters = {};
+      let currentSection = "ventas";
+      let currentData = {
+        ventas: [],
+        transacciones: [],
+        agregados: {}
+      };
+
+      let currentDataRaw = {
+        ventas: [],
+        transacciones: []
+      };
+
+      // ==========================================
+      // UTILIDADES
+      // ==========================================
+
+      const formatCurrency = (value, decimals = 2) => {
+        return new Intl.NumberFormat("es-CO", {
+          style: "currency",
+          currency: "COP",
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals
+        }).format(value);
+      };
+
+      const formatNumber = (value) => {
+        return new Intl.NumberFormat("es-CO").format(value);
+      };
+
+      const normalizeCurrencyCode = (value, fallback = "COP") => {
+        const code = String(value || "").trim().toUpperCase();
+        return code || fallback;
+      };
+
+      const formatCurrencyByCode = (value, currency, decimals = 2) => {
+        const code = normalizeCurrencyCode(currency);
+        try {
+          return new Intl.NumberFormat("es-CO", {
+            style: "currency",
+            currency: code,
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+          }).format(Number(value || 0));
+        } catch (error) {
+          return `${code} ${formatNumber(Number(value || 0))}`;
+        }
+      };
+
+      const sumByCurrency = (rows, valueFn, currencyFn) => {
+        const totals = new Map();
+
+        rows.forEach((row) => {
+          const currency = normalizeCurrencyCode(currencyFn(row));
+          const value = Number(valueFn(row) || 0);
+          totals.set(currency, (totals.get(currency) || 0) + value);
+        });
+
+        return Array.from(totals.entries())
+          .map(([currency, total]) => ({ currency, total: Number(total.toFixed(2)) }))
+          .sort((a, b) => a.currency.localeCompare(b.currency));
+      };
+
+      const formatCurrencyBreakdown = (rows, valueFn, currencyFn, decimals = 0) => {
+        const totals = sumByCurrency(rows, valueFn, currencyFn);
+        if (!totals.length) {
+          return formatCurrencyByCode(0, "COP", decimals);
+        }
+        if (totals.length === 1) {
+          return formatCurrencyByCode(totals[0].total, totals[0].currency, decimals);
+        }
+        return totals
+          .map((entry) => `${entry.currency}: ${formatCurrencyByCode(entry.total, entry.currency, decimals)}`)
+          .join(" | ");
+      };
+
+      const formatDate = (dateString) => {
+        const raw = String(dateString || "").trim();
+        if (!raw) return "";
+
+        const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (isoMatch) {
+          return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+        }
+
+        const parsed = new Date(raw);
+        if (!Number.isNaN(parsed.getTime())) {
+          const day = String(parsed.getDate()).padStart(2, "0");
+          const month = String(parsed.getMonth() + 1).padStart(2, "0");
+          const year = parsed.getFullYear();
+          return `${day}/${month}/${year}`;
+        }
+
+        return raw;
+      };
+
+      const showLoading = (elementId) => {
+        const element = document.getElementById(elementId);
+        if (element) {
+          element.innerHTML = '<div class="flex justify-center py-8"><div class="loading-spinner"></div></div>';
+        }
+      };
+
+      // ==========================================
+      // INICIALIZACIÓN
+      // ==========================================
+
+      async function initializeReports() {
+        try {
+          await loadFilterOptions();
+          setupSectionCards();
+          setSection("ventas", { skipApply: true });
+          await applyFilters();
+        } catch (error) {
+          console.error("Error initializing reports:", error);
+        }
+      }
+
+      async function apiFetchOrAuth(url, options = {}) {
+        const resp = await fetch(url, {
+          credentials: 'include',
+          ...options
+        });
+        if (resp.status === 401) {
+          window.scGuard?.goLogin?.();
+          throw new Error('No autenticado');
+        }
+        return resp;
+      }
+
+      async function loadFilterOptions() {
+        try {
+          const response = await apiFetchOrAuth(`${API_URL}/reportes/filtros-disponibles`);
+          const result = await response.json();
+
+          if (!result.success) throw new Error(result.message);
+
+          const { clientes, monedas, rango_fechas } = result.data;
+
+          // Llenar dropdown de clientes
+          const clienteSelect = document.getElementById("filter-cliente");
+          clientes.forEach(cliente => {
+            const option = document.createElement("option");
+            option.value = cliente.id_cliente;
+            option.textContent = `${cliente.nombre} (${cliente.identificacion})`;
+            clienteSelect.appendChild(option);
+          });
+
+          // Llenar dropdown de monedas
+          const monedaSelect = document.getElementById("filter-moneda");
+          monedas.forEach(moneda => {
+            const option = document.createElement("option");
+            option.value = moneda.codigo;
+            option.textContent = `${moneda.codigo} - ${moneda.nombre}`;
+            monedaSelect.appendChild(option);
+          });
+
+          // Llenar dropdown de bancos
+          const bancoSelect = document.getElementById("filter-banco");
+          (result.data.bancos || []).forEach(banco => {
+            const option = document.createElement("option");
+            option.value = banco.id_banco;
+            option.textContent = banco.nombre;
+            bancoSelect.appendChild(option);
+          });
+
+          // Establecer rangos de fechas
+          if (rango_fechas.fecha_minima) {
+            document.getElementById("filter-fecha-inicio").min = rango_fechas.fecha_minima;
+          }
+          if (rango_fechas.fecha_maxima) {
+            document.getElementById("filter-fecha-fin").max = rango_fechas.fecha_maxima;
+          }
+        } catch (error) {
+          console.error("Error loading filter options:", error);
+        }
+      }
+
+      async function applyFilters() {
+        try {
+          currentFilters = buildFiltersForSection();
+
+          // En la sección Clientes, el cliente es obligatorio para evitar reportes "difusos".
+          if (currentSection === 'clientes' && !currentFilters.cliente_id) {
+            currentData = { ventas: [], transacciones: [], agregados: {} };
+            currentDataRaw = { ventas: [], transacciones: [] };
+            updateStatistics();
+            renderTablesData();
+            updateCharts();
+            refreshManualApplyOptions();
+            return;
+          }
+
+          // Limpiar filtros vacíos
+          Object.keys(currentFilters).forEach(key => {
+            if (!currentFilters[key]) delete currentFilters[key];
+          });
+
+          // Construir query string
+          const queryString = new URLSearchParams(currentFilters).toString();
+
+          // Mostrar loading
+          showLoading("tabla-ventas-body");
+          showLoading("tabla-transacciones-body");
+
+          // Cargar datos
+          const [datosResponse, agregadosResponse] = await Promise.all([
+            apiFetchOrAuth(`${API_URL}/reportes/datos?${queryString}`),
+            apiFetchOrAuth(`${API_URL}/reportes/agregados?${queryString}`)
+          ]);
+
+          const datosResult = await datosResponse.json();
+          const agregadosResult = await agregadosResponse.json();
+
+          if (!datosResult.success || !agregadosResult.success) {
+            throw new Error("Error cargando datos");
+          }
+
+          currentDataRaw.ventas = datosResult.data.ventas || [];
+          currentDataRaw.transacciones = datosResult.data.transacciones || [];
+          currentData.ventas = [...currentDataRaw.ventas];
+          currentData.transacciones = [...currentDataRaw.transacciones];
+          currentData.agregados = agregadosResult.data;
+
+          // Aplicar slider (filtro local) para mantener UI rápida y con control
+          applyLocalSliderFilter();
+
+          // Actualizar UI
+          updateStatistics();
+          renderTablesData();
+          updateCharts();
+          refreshManualApplyOptions();
+        } catch (error) {
+          console.error("Error applying filters:", error);
+          alert("Error al aplicar filtros: " + error.message);
+        }
+      }
+
+      function refreshSliderBoundsFromRaw() {
+        const sliderWrap = document.querySelector('.filter-group[data-filter="slider"]');
+        const slider = document.getElementById('filter-slider');
+        const sliderInput = document.getElementById('filter-slider-input');
+        const sliderMin = document.getElementById('filter-slider-min');
+        const sliderMax = document.getElementById('filter-slider-max');
+        const sliderVal = document.getElementById('filter-slider-value');
+        if (!sliderWrap || !slider || !sliderInput || !sliderMin || !sliderMax || !sliderVal) return;
+
+        const mode = sliderWrap.dataset.sliderMode || '';
+        const currentValue = Number(slider.value || 0);
+
+        if (mode === 'ventas_saldo') {
+          const max = Math.max(0, ...((currentDataRaw.ventas || []).map((v) => Number(v.saldo_venta || 0))));
+          slider.min = '0';
+          slider.max = String(Math.ceil(max));
+          slider.step = String(Math.max(1, Math.ceil(max / 100) || 1));
+          sliderInput.min = '0';
+          sliderInput.max = String(Math.ceil(max));
+          sliderInput.step = '0.01';
+          if (currentValue > max) slider.value = String(Math.ceil(max));
+          sliderInput.value = String(Number(slider.value || 0));
+          sliderMin.textContent = formatCurrency(0, 0);
+          sliderMax.textContent = formatCurrency(max || 0, 0);
+          sliderVal.textContent = formatCurrency(Number(slider.value || 0), 0);
+        }
+
+        if (mode === 'tx_monto') {
+          const max = Math.max(0, ...((currentDataRaw.transacciones || []).map((t) => Number(t.valor || 0))));
+          slider.min = '0';
+          slider.max = String(Math.ceil(max));
+          slider.step = String(Math.max(1, Math.ceil(max / 100) || 1));
+          sliderInput.min = '0';
+          sliderInput.max = String(Math.ceil(max));
+          sliderInput.step = '0.01';
+          if (currentValue > max) slider.value = String(Math.ceil(max));
+          sliderInput.value = String(Number(slider.value || 0));
+          sliderMin.textContent = formatCurrency(0, 0);
+          sliderMax.textContent = formatCurrency(max || 0, 0);
+          sliderVal.textContent = formatCurrency(Number(slider.value || 0), 0);
+        }
+      }
+
+      function getSliderFilterValue() {
+        const slider = document.getElementById('filter-slider');
+        const sliderInput = document.getElementById('filter-slider-input');
+        const rawValue = sliderInput?.value ?? slider?.value ?? 0;
+        const parsed = Number(rawValue);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      function setSliderFilterValue(value) {
+        const slider = document.getElementById('filter-slider');
+        const sliderInput = document.getElementById('filter-slider-input');
+        const sliderVal = document.getElementById('filter-slider-value');
+        const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+
+        if (slider) slider.value = String(numericValue);
+        if (sliderInput) sliderInput.value = String(numericValue);
+        if (sliderVal) sliderVal.textContent = formatCurrency(numericValue, 0);
+      }
+
+      function applyLocalSliderFilter() {
+        const sliderValue = getSliderFilterValue();
+        refreshSliderBoundsFromRaw();
+        setSliderFilterValue(sliderValue);
+
+        const sliderWrap = document.querySelector('.filter-group[data-filter="slider"]');
+        const sliderMode = sliderWrap?.dataset.sliderMode || '';
+
+        currentData.ventas = [...(currentDataRaw.ventas || [])];
+        currentData.transacciones = [...(currentDataRaw.transacciones || [])];
+
+        if (sliderMode === 'ventas_saldo') {
+          currentData.ventas = currentData.ventas.filter((v) => Number(v.saldo_venta || 0) >= sliderValue);
+        }
+        if (sliderMode === 'tx_monto') {
+          currentData.transacciones = currentData.transacciones.filter((t) => Number(t.valor || 0) >= sliderValue);
+        }
+      }
+
+      function buildFiltersForSection() {
+        const clienteId = document.getElementById("filter-cliente")?.value || "";
+        const moneda = document.getElementById("filter-moneda")?.value || "";
+        const bancoId = document.getElementById("filter-banco")?.value || "";
+        const fechaInicio = document.getElementById("filter-fecha-inicio")?.value || "";
+        const fechaFin = document.getElementById("filter-fecha-fin")?.value || "";
+
+        const base = {
+          moneda: moneda || undefined,
+          fecha_inicio: fechaInicio || undefined,
+          fecha_fin: fechaFin || undefined
+        };
+
+        if (currentSection === "clientes") {
+          return {
+            ...base,
+            tipo_dato: "ambos",
+            cliente_id: clienteId || undefined
+          };
+        }
+
+        if (currentSection === "ventas") {
+          return {
+            ...base,
+            tipo_dato: "ventas",
+            cliente_id: clienteId || undefined
+          };
+        }
+
+        if (currentSection === "transacciones") {
+          return {
+            moneda: moneda || undefined,
+            fecha_inicio: fechaInicio || undefined,
+            tipo_dato: "transacciones"
+          };
+        }
+
+        // bancos
+        return {
+          moneda: moneda || undefined,
+          fecha_inicio: fechaInicio || undefined,
+          tipo_dato: "transacciones",
+          banco_id: bancoId || undefined
+        };
+      }
+
+      function updateStatistics() {
+        const ventas = currentData.ventas || [];
+        const transacciones = currentData.transacciones || [];
+
+        const label1 = document.getElementById('stat-label-1');
+        const label2 = document.getElementById('stat-label-2');
+        const label3 = document.getElementById('stat-label-3');
+        const label4 = document.getElementById('stat-label-4');
+
+        const vCount = ventas.length;
+        const tCount = transacciones.length;
+
+        const vTotal = formatCurrencyBreakdown(ventas, (v) => v.total, (v) => v.moneda, 0);
+        const vAplicado = formatCurrencyBreakdown(ventas, (v) => v.total_aplicado, (v) => v.moneda, 0);
+        const vSaldo = formatCurrencyBreakdown(ventas, (v) => v.saldo_venta, (v) => v.moneda, 0);
+
+        const tTotal = formatCurrencyBreakdown(transacciones, (t) => t.valor, (t) => t.moneda, 0);
+        const tAplicado = formatCurrencyBreakdown(transacciones, (t) => t.total_aplicado, (t) => t.moneda, 0);
+        const tSaldo = formatCurrencyBreakdown(transacciones, (t) => t.saldo_transaccion, (t) => t.moneda, 0);
+
+        if (currentSection === 'clientes') {
+          if (label1) label1.textContent = 'Ventas ligadas';
+          if (label2) label2.textContent = 'Transacciones ligadas';
+          if (label3) label3.textContent = 'Saldo por pagar';
+          if (label4) label4.textContent = 'Saldo positivo';
+
+          document.getElementById('stat-clientes').textContent = formatNumber(vCount);
+          document.getElementById('stat-ventas').textContent = formatNumber(tCount);
+          document.getElementById('stat-monto-ventas').textContent = vSaldo;
+          document.getElementById('stat-transacciones').textContent = tSaldo;
+          return;
+        }
+
+        if (currentSection === 'ventas') {
+          if (label1) label1.textContent = 'Total ventas';
+          if (label2) label2.textContent = 'Monto ventas';
+          if (label3) label3.textContent = 'Aplicado';
+          if (label4) label4.textContent = 'Saldo pendiente';
+
+          document.getElementById('stat-clientes').textContent = formatNumber(vCount);
+          document.getElementById('stat-ventas').textContent = vTotal;
+          document.getElementById('stat-monto-ventas').textContent = vAplicado;
+          document.getElementById('stat-transacciones').textContent = vSaldo;
+          return;
+        }
+
+        // transacciones / bancos
+        if (label1) label1.textContent = 'Total transacciones';
+        if (label2) label2.textContent = 'Monto transacciones';
+        if (label3) label3.textContent = 'Aplicado';
+        if (label4) label4.textContent = 'Saldo positivo';
+
+        document.getElementById('stat-clientes').textContent = formatNumber(tCount);
+        document.getElementById('stat-ventas').textContent = tTotal;
+        document.getElementById('stat-monto-ventas').textContent = tAplicado;
+        document.getElementById('stat-transacciones').textContent = tSaldo;
+      }
+
+      function renderTablesData() {
+        const tabsBar = document.getElementById('detail-tabs-bar');
+        const tabVentasBtn = document.querySelector('.tab-button[data-tab="ventas"]');
+        const tabTxBtn = document.querySelector('.tab-button[data-tab="transacciones"]');
+        const tabVentasContent = document.getElementById('tab-ventas');
+        const tabTxContent = document.getElementById('tab-transacciones');
+
+        const requiresClientSelection = currentSection === 'clientes' && !currentFilters?.cliente_id;
+
+
+        const showVentas = currentSection === 'clientes' || currentSection === 'ventas';
+        const showTx = currentSection === 'clientes' || currentSection === 'transacciones' || currentSection === 'bancos';
+
+        // Tabs solo en Clientes
+        if (tabsBar) tabsBar.classList.toggle('hidden', currentSection !== 'clientes');
+        if (tabVentasBtn) tabVentasBtn.classList.toggle('hidden', !showVentas);
+        if (tabTxBtn) tabTxBtn.classList.toggle('hidden', !showTx);
+
+        // Mostrar solo la tabla pertinente
+        if (tabVentasContent) tabVentasContent.classList.toggle('hidden', !showVentas);
+        if (tabTxContent) tabTxContent.classList.toggle('hidden', !showTx);
+
+        if (currentSection === 'clientes') {
+          tabVentasBtn?.click();
+        }
+
+        // Tabla de ventas
+        const ventasBody = document.getElementById("tabla-ventas-body");
+        if (requiresClientSelection) {
+          ventasBody.innerHTML = `
+            <tr>
+              <td colspan="12" class="no-data">
+                <div class="no-data-icon">👤</div>
+                <p><strong>Selecciona un cliente</strong> para ver sus ventas.</p>
+                <p class="text-sm">Usa el filtro “Cliente” y luego “Aplicar Filtros”.</p>
+              </td>
+            </tr>
+          `;
+        } else if (currentData.ventas.length === 0) {
+          ventasBody.innerHTML = `
+            <tr>
+              <td colspan="12" class="no-data">
+                <div class="no-data-icon">📊</div>
+                <p>No hay datos de ventas</p>
+              </td>
+            </tr>
+          `;
+        } else {
+          ventasBody.innerHTML = currentData.ventas.map(venta => `
+            <tr>
+              <td><strong>#${venta.id_venta}</strong></td>
+              <td>${venta.cliente_nombre}</td>
+              <td>${venta.cliente_nit}</td>
+              <td>${formatDate(venta.fecha_elaboracion)}</td>
+              <td>${formatDate(venta.fecha_vencimiento)}</td>
+              <td>${venta.comprobante || '-'}</td>
+              <td><span class="badge badge-warning">${venta.tipo_transaccion || '-'}</span></td>
+              <td><strong>${venta.moneda}</strong></td>
+              <td>${formatCurrency(venta.total)}</td>
+              <td class="text-green-600 font-bold">${formatCurrency(venta.total_aplicado)}</td>
+              <td class="text-red-600 font-bold">${formatCurrency(venta.saldo_venta)}</td>
+              <td><span class="badge badge-success">${venta.estado_envio_correo || 'N/A'}</span></td>
+            </tr>
+          `).join("");
+        }
+
+        // Tabla de transacciones
+        const transaccionesBody = document.getElementById("tabla-transacciones-body");
+        if (requiresClientSelection) {
+          transaccionesBody.innerHTML = `
+            <tr>
+              <td colspan="10" class="no-data">
+                <div class="no-data-icon">👤</div>
+                <p><strong>Selecciona un cliente</strong> para ver sus transacciones.</p>
+                <p class="text-sm">Usa el filtro “Cliente” y luego “Aplicar Filtros”.</p>
+              </td>
+            </tr>
+          `;
+        } else if (currentData.transacciones.length === 0) {
+          transaccionesBody.innerHTML = `
+            <tr>
+              <td colspan="10" class="no-data">
+                <div class="no-data-icon">📋</div>
+                <p>No hay datos de transacciones</p>
+              </td>
+            </tr>
+          `;
+        } else {
+          transaccionesBody.innerHTML = currentData.transacciones.map(tx => `
+            <tr>
+              <td><strong>#${tx.id_transaccion}</strong></td>
+              <td>${tx.cliente_nombre}</td>
+              <td>${tx.cliente_nit}</td>
+              <td>${formatDate(tx.fecha)}</td>
+              <td>
+                ${tx.descripcion || tx.nombre || '-'}
+                ${Number(tx.ventas_asociadas || 0) <= 0 ? '<br/><small class="text-red-600 font-bold">Sin venta asociada</small>' : ''}
+              </td>
+              <td>${tx.banco_nombre}</td>
+              <td><strong>${tx.moneda}</strong></td>
+              <td>${formatCurrency(tx.valor)}</td>
+              <td class="text-green-600 font-bold">${formatCurrency(tx.total_aplicado)}</td>
+              <td class="text-red-600 font-bold">${formatCurrency(tx.saldo_transaccion)}</td>
+            </tr>
+          `).join("");
+        }
+      }
+
+      function destroyCharts() {
+        Object.values(chartsInstances).forEach(chart => {
+          if (chart) chart.destroy();
+        });
+        chartsInstances = {};
+        chartsMeta = [];
+      }
+
+      function updateCharts() {
+        destroyCharts();
+
+        const chartsGrid = document.getElementById("charts-grid");
+        const chartsEmpty = document.getElementById("charts-empty");
+        const chartsTabsWrap = document.getElementById("charts-tabs-wrap");
+        const chartsTabs = document.getElementById("charts-tabs");
+        if (!chartsGrid || !chartsEmpty) return;
+
+        chartsGrid.innerHTML = "";
+        chartsEmpty.classList.add("hidden");
+        if (chartsTabs) chartsTabs.innerHTML = "";
+        if (chartsTabsWrap) chartsTabsWrap.classList.add("hidden");
+
+        const palette = {
+          primary: "rgb(16, 42, 71)",
+          accent: "rgb(229, 17, 72)",
+          accentSoft: "rgba(229, 17, 72, 0.18)",
+          primarySoft: "rgba(16, 42, 71, 0.12)",
+          doughnut: [
+            "rgba(229, 17, 72, 0.82)",
+            "rgba(16, 42, 71, 0.82)",
+            "rgba(59, 130, 246, 0.82)",
+            "rgba(34, 197, 94, 0.82)",
+            "rgba(251, 146, 60, 0.82)",
+            "rgba(168, 85, 247, 0.82)"
+          ]
+        };
+
+        const seriesStyles = [
+          { border: "rgba(229, 17, 72, 0.95)", fill: "rgba(229, 17, 72, 0.26)" },
+          { border: "rgba(16, 42, 71, 0.95)", fill: "rgba(16, 42, 71, 0.22)" },
+          { border: "rgba(59, 130, 246, 0.95)", fill: "rgba(59, 130, 246, 0.20)" },
+          { border: "rgba(34, 197, 94, 0.95)", fill: "rgba(34, 197, 94, 0.20)" },
+          { border: "rgba(251, 146, 60, 0.95)", fill: "rgba(251, 146, 60, 0.20)" },
+          { border: "rgba(168, 85, 247, 0.95)", fill: "rgba(168, 85, 247, 0.22)" }
+        ];
+
+        const buildCurrencyChartData = (rows, labelFn, valueFn, currencyFn) => {
+          const labels = [];
+          const labelSet = new Set();
+          const matrix = new Map();
+
+          rows.forEach((row) => {
+            const label = String(labelFn(row) || "").trim();
+            if (!label) {
+              return;
+            }
+
+            if (!labelSet.has(label)) {
+              labelSet.add(label);
+              labels.push(label);
+            }
+
+            const currency = normalizeCurrencyCode(currencyFn(row));
+            if (!matrix.has(currency)) {
+              matrix.set(currency, new Map());
+            }
+
+            const bucket = matrix.get(currency);
+            bucket.set(label, (bucket.get(label) || 0) + Number(valueFn(row) || 0));
+          });
+
+          const currencies = Array.from(matrix.keys()).sort();
+          const datasets = currencies.map((currency, index) => {
+            const style = seriesStyles[index % seriesStyles.length];
+            const bucket = matrix.get(currency) || new Map();
+            return {
+              label: currency,
+              currency,
+              data: labels.map((label) => Number((bucket.get(label) || 0).toFixed(2))),
+              borderColor: style.border,
+              backgroundColor: style.fill,
+              borderWidth: 2,
+              borderRadius: 8,
+              tension: 0.35,
+              fill: true,
+              pointRadius: 4,
+              pointBackgroundColor: style.border,
+              pointBorderColor: "white",
+              pointBorderWidth: 2
+            };
+          });
+
+          return { labels, datasets, currencies };
+        };
+
+        const formatChartAxisValue = (value, currencies) => {
+          if (currencies.length > 1) {
+            return formatNumber(value);
+          }
+          return formatCurrencyByCode(value, currencies[0] || "COP", 0);
+        };
+
+        const sumBy = (rows, keyFn, valueFn) => {
+          const map = new Map();
+          rows.forEach((row) => {
+            const key = keyFn(row);
+            if (!key) return;
+            const value = Number(valueFn(row) || 0);
+            map.set(key, (map.get(key) || 0) + value);
+          });
+          return Array.from(map.entries()).map(([k, v]) => ({ key: k, value: v }));
+        };
+
+        const ensureChartCard = ({ key, title, span2 = false }) => {
+          const wrapper = document.createElement("div");
+          wrapper.className = `bg-white rounded-xl shadow-sm border border-gray-200 p-6 ${span2 ? "lg:col-span-2" : ""}`;
+          wrapper.dataset.chartKey = String(key);
+
+          const heading = document.createElement("h3");
+          heading.className = "font-bold text-primary mb-4";
+          heading.textContent = title;
+
+          const container = document.createElement("div");
+          container.className = "chart-container";
+          if (span2) {
+            container.style.height = "350px";
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.id = `chart-${key}`;
+
+          container.appendChild(canvas);
+          wrapper.appendChild(heading);
+          wrapper.appendChild(container);
+          chartsGrid.appendChild(wrapper);
+          return { canvas, wrapper };
+        };
+
+        const setActiveChart = (key) => {
+          const k = String(key);
+          chartsGrid.querySelectorAll('[data-chart-key]').forEach((el) => {
+            el.classList.toggle('hidden', el.dataset.chartKey !== k);
+          });
+          if (chartsTabs) {
+            chartsTabs.querySelectorAll('[data-chart-tab]').forEach((btn) => {
+              const isActive = btn.dataset.chartTab === k;
+              btn.classList.toggle('active', isActive);
+              btn.classList.toggle('text-primary', isActive);
+              btn.classList.toggle('border-primary', isActive);
+              btn.classList.toggle('text-gray-600', !isActive);
+              btn.classList.toggle('border-transparent', !isActive);
+            });
+          }
+          // Chart.js puede necesitar recalcular tamaño al mostrarse
+          if (chartsInstances[k] && typeof chartsInstances[k].resize === 'function') {
+            chartsInstances[k].resize();
+          }
+        };
+
+        const commonTooltip = {
+          backgroundColor: "rgba(16, 42, 71, 0.92)",
+          titleColor: "#fff",
+          bodyColor: "#fff",
+          borderColor: palette.accent,
+          borderWidth: 1,
+          cornerRadius: 8,
+          padding: 12
+        };
+
+        const ventas = currentData.ventas || [];
+        const transacciones = currentData.transacciones || [];
+
+        const section = currentSection;
+        const chartSpecs = [];
+
+        if (section === "clientes") {
+          chartSpecs.push({ key: "ventas_moneda", title: "Moneda (Ventas)" });
+          chartSpecs.push({ key: "ventas_tiempo", title: "Serie de Tiempo - Ventas", span2: true });
+          chartSpecs.push({ key: "tx_tiempo", title: "Serie de Tiempo - Transacciones", span2: true });
+        }
+
+        if (section === "ventas") {
+          chartSpecs.push({ key: "ventas_moneda", title: "Distribución por Moneda (Ventas)" });
+          chartSpecs.push({ key: "ventas_saldo_cliente", title: "Saldo Pendiente por Cliente" });
+          chartSpecs.push({ key: "ventas_tiempo", title: "Serie de Tiempo - Ventas", span2: true });
+        }
+
+        if (section === "transacciones") {
+          chartSpecs.push({ key: "tx_banco", title: "Transacciones por Banco" });
+          chartSpecs.push({ key: "tx_moneda", title: "Distribución por Moneda (Transacciones)" });
+          chartSpecs.push({ key: "tx_tiempo", title: "Serie de Tiempo - Transacciones Diarias", span2: true });
+        }
+
+        if (section === "bancos") {
+          chartSpecs.push({ key: "tx_banco", title: "Transacciones por Banco" });
+          chartSpecs.push({ key: "tx_moneda", title: "Distribución por Moneda (Transacciones)" });
+          chartSpecs.push({ key: "tx_tiempo", title: "Serie de Tiempo - Transacciones Diarias", span2: true });
+        }
+
+        const shouldRender = (key) => {
+          if (key.startsWith("tx_")) return transacciones.length > 0;
+          return ventas.length > 0;
+        };
+
+        const specsToRender = chartSpecs.filter((s) => shouldRender(s.key));
+        if (specsToRender.length === 0) {
+          chartsEmpty.classList.remove("hidden");
+          return;
+        }
+
+        // Tabs: si hay más de un gráfico, mostrar por pestañas (solo uno visible)
+        if (chartsTabs && chartsTabsWrap && specsToRender.length > 1) {
+          chartsTabsWrap.classList.remove("hidden");
+          specsToRender.forEach((spec, idx) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.chartTab = spec.key;
+            btn.className = `tab-button py-3 px-4 font-bold transition-all border-b-2 ${idx === 0 ? "active text-primary border-primary" : "text-gray-600 hover:text-primary border-transparent"}`;
+            btn.textContent = spec.title;
+            btn.addEventListener('click', () => setActiveChart(spec.key));
+            chartsTabs.appendChild(btn);
+          });
+        }
+
+        specsToRender.forEach((spec) => {
+          const { canvas, wrapper } = ensureChartCard(spec);
+          const key = spec.key;
+          chartsMeta.push({ key, title: spec.title });
+
+          if (key === "ventas_saldo_cliente") {
+            const grouped = sumBy(ventas, (v) => v.cliente_nombre, (v) => v.saldo_venta);
+            grouped.sort((a, b) => b.value - a.value);
+            const top = grouped.slice(0, 10);
+            chartsInstances[key] = new Chart(canvas, {
+              type: "bar",
+              data: {
+                labels: top.map((d) => d.key),
+                datasets: [{
+                  label: "Saldo pendiente",
+                  data: top.map((d) => d.value),
+                  borderColor: palette.accent,
+                  borderWidth: 2,
+                  borderRadius: 8,
+                  backgroundColor: (context) => {
+                    const { chart } = context;
+                    const { ctx, chartArea } = chart;
+                    if (!chartArea) return palette.accentSoft;
+                    const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                    g.addColorStop(0, "rgba(229, 17, 72, 0.95)");
+                    g.addColorStop(1, "rgba(229, 17, 72, 0.25)");
+                    return g;
+                  }
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    ...commonTooltip,
+                    callbacks: { label: (ctx) => formatCurrency(ctx.parsed.y, 0) }
+                  }
+                },
+                scales: {
+                  y: { beginAtZero: true, ticks: { callback: (v) => formatCurrency(v, 0) } }
+                }
+              }
+            });
+            return;
+          }
+
+          if (key === "ventas_cliente") {
+            const rows = (currentData.agregados.por_cliente || []).length ? currentData.agregados.por_cliente : ventas;
+            const chartData = buildCurrencyChartData(
+              rows,
+              (r) => r.cliente || r.cliente_nombre,
+              (r) => Number(r.total_ventas ?? r.total ?? 0),
+              (r) => r.moneda
+            );
+            const multiCurrency = chartData.currencies.length > 1;
+
+            chartsInstances[key] = new Chart(canvas, {
+              type: "bar",
+              data: {
+                labels: chartData.labels,
+                datasets: chartData.datasets.map((dataset, index) => {
+                  const style = seriesStyles[index % seriesStyles.length];
+                  return {
+                    label: dataset.label,
+                    currency: dataset.currency,
+                    data: dataset.data,
+                    borderColor: style.border,
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    backgroundColor: style.fill
+                  };
+                })
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: multiCurrency },
+                  tooltip: {
+                    ...commonTooltip,
+                    callbacks: {
+                      label: (ctx) => formatCurrencyByCode(ctx.parsed.y, ctx.dataset.currency || ctx.dataset.label, 0)
+                    }
+                  }
+                },
+                scales: {
+                  y: { beginAtZero: true, ticks: { callback: (v) => formatChartAxisValue(v, chartData.currencies) } }
+                }
+              }
+            });
+            return;
+          }
+
+          if (key === "ventas_moneda") {
+            const rows = (currentData.agregados.por_moneda || [])
+              .map((r) => ({ key: r.moneda, value: Number(r.total || 0) }))
+              .filter((r) => r.key);
+            const grouped = (rows.length ? rows : sumBy(ventas, (v) => v.moneda, (v) => v.total))
+              .slice()
+              .sort((a, b) => b.value - a.value);
+            chartsInstances[key] = new Chart(canvas, {
+              type: "doughnut",
+              data: {
+                labels: grouped.map((d) => d.key),
+                datasets: [{
+                  data: grouped.map((d) => d.value),
+                  backgroundColor: palette.doughnut,
+                  borderColor: "white",
+                  borderWidth: 3,
+                  hoverOffset: 10
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: "bottom",
+                    labels: { padding: 15, font: { size: 13 } }
+                  },
+                  tooltip: {
+                    ...commonTooltip,
+                    callbacks: { label: (ctx) => formatCurrency(ctx.parsed, 0) }
+                  }
+                }
+              }
+            });
+            return;
+          }
+
+          if (key === "ventas_tiempo") {
+            const rows = (currentData.agregados.serie_tiempo_ventas || []).length ? currentData.agregados.serie_tiempo_ventas : ventas;
+            const chartData = buildCurrencyChartData(
+              rows,
+              (r) => r.fecha || r.fecha_elaboracion,
+              (r) => Number(r.total ?? r.total_ventas ?? 0),
+              (r) => r.moneda
+            );
+            const multiCurrency = chartData.currencies.length > 1;
+
+            chartsInstances[key] = new Chart(canvas, {
+              type: "line",
+              data: {
+                labels: chartData.labels,
+                datasets: chartData.datasets.map((dataset, index) => {
+                  const style = seriesStyles[index % seriesStyles.length];
+                  return {
+                    label: dataset.label,
+                    currency: dataset.currency,
+                    data: dataset.data,
+                    borderColor: style.border,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: style.border,
+                    pointBorderColor: "white",
+                    pointBorderWidth: 2,
+                    backgroundColor: style.fill
+                  };
+                })
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: multiCurrency, labels: { font: { size: 12 } } },
+                  tooltip: {
+                    ...commonTooltip,
+                    callbacks: {
+                      label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyByCode(ctx.parsed.y, ctx.dataset.currency || ctx.dataset.label, 0)}`
+                    }
+                  }
+                },
+                scales: {
+                  y: { beginAtZero: true, ticks: { callback: (v) => formatChartAxisValue(v, chartData.currencies) } }
+                }
+              }
+            });
+            return;
+          }
+
+          if (key === "tx_banco") {
+            const rows = (currentData.agregados.transacciones_por_banco || []).length ? currentData.agregados.transacciones_por_banco : transacciones;
+            const chartData = buildCurrencyChartData(
+              rows,
+              (r) => r.banco || r.banco_nombre,
+              (r) => Number(r.total ?? r.valor ?? 0),
+              (r) => r.moneda
+            );
+            const multiCurrency = chartData.currencies.length > 1;
+
+            chartsInstances[key] = new Chart(canvas, {
+              type: "bar",
+              data: {
+                labels: chartData.labels,
+                datasets: chartData.datasets.map((dataset, index) => {
+                  const style = seriesStyles[index % seriesStyles.length];
+                  return {
+                    label: dataset.label,
+                    currency: dataset.currency,
+                    data: dataset.data,
+                    borderColor: style.border,
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    backgroundColor: style.fill
+                  };
+                })
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: multiCurrency },
+                  tooltip: {
+                    ...commonTooltip,
+                    callbacks: {
+                      label: (ctx) => formatCurrencyByCode(ctx.parsed.y, ctx.dataset.currency || ctx.dataset.label, 0)
+                    }
+                  }
+                },
+                scales: {
+                  y: { beginAtZero: true, ticks: { callback: (v) => formatChartAxisValue(v, chartData.currencies) } }
+                }
+              }
+            });
+            return;
+          }
+
+          if (key === "tx_moneda") {
+            const grouped = sumBy(transacciones, (t) => t.moneda, (t) => t.valor);
+            grouped.sort((a, b) => b.value - a.value);
+            chartsInstances[key] = new Chart(canvas, {
+              type: "doughnut",
+              data: {
+                labels: grouped.map((d) => d.key),
+                datasets: [{
+                  data: grouped.map((d) => d.value),
+                  backgroundColor: palette.doughnut,
+                  borderColor: "white",
+                  borderWidth: 3,
+                  hoverOffset: 10
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: "bottom",
+                    labels: { padding: 15, font: { size: 13 } }
+                  },
+                  tooltip: {
+                    ...commonTooltip,
+                    callbacks: { label: (ctx) => formatCurrency(ctx.parsed, 0) }
+                  }
+                }
+              }
+            });
+            return;
+          }
+
+          if (key === "tx_tiempo") {
+            const rows = (currentData.agregados.serie_tiempo_transacciones || []).length ? currentData.agregados.serie_tiempo_transacciones : transacciones;
+            const chartData = buildCurrencyChartData(
+              rows,
+              (r) => r.fecha,
+              (r) => Number(r.total ?? r.valor ?? 0),
+              (r) => r.moneda
+            );
+            const multiCurrency = chartData.currencies.length > 1;
+
+            chartsInstances[key] = new Chart(canvas, {
+              type: "line",
+              data: {
+                labels: chartData.labels,
+                datasets: chartData.datasets.map((dataset, index) => {
+                  const style = seriesStyles[index % seriesStyles.length];
+                  return {
+                    label: dataset.label,
+                    currency: dataset.currency,
+                    data: dataset.data,
+                    borderColor: style.border,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: style.border,
+                    pointBorderColor: "white",
+                    pointBorderWidth: 2,
+                    backgroundColor: style.fill
+                  };
+                })
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: multiCurrency, labels: { font: { size: 12 } } },
+                  tooltip: {
+                    ...commonTooltip,
+                    callbacks: {
+                      label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyByCode(ctx.parsed.y, ctx.dataset.currency || ctx.dataset.label, 0)}`
+                    }
+                  }
+                },
+                scales: {
+                  y: { beginAtZero: true, ticks: { callback: (v) => formatChartAxisValue(v, chartData.currencies) } }
+                }
+              }
+            });
+          }
+        });
+
+        // Asegurar estado inicial de pestañas (primer gráfico)
+        if (specsToRender.length > 1) {
+          setActiveChart(specsToRender[0].key);
+        }
+      }
+
+      function setupSectionCards() {
+        document.querySelectorAll("#report-mode-cards [data-mode]").forEach((btn) => {
+          btn.addEventListener("click", () => setSection(btn.dataset.mode));
+        });
+      }
+
+      function setSection(section, { skipApply = false } = {}) {
+        currentSection = section;
+
+        document.querySelectorAll("#report-mode-cards [data-mode]").forEach((btn) => {
+          const isActive = btn.dataset.mode === section;
+          btn.classList.toggle("border-accent", isActive);
+          btn.classList.toggle("shadow-lg", isActive);
+        });
+
+        syncFilterUIForSection(section);
+        if (!skipApply) applyFilters();
+      }
+
+      function syncFilterUIForSection(section) {
+        const hint = document.getElementById("mode-hint");
+        const fechaInicioLabel = document.getElementById("filter-fecha-inicio-label");
+        const fechaFinGroup = document.getElementById("filter-fecha-fin-group");
+        const fechaFinLabel = document.getElementById("filter-fecha-fin-label");
+        if (hint) {
+          hint.textContent =
+            section === "clientes"
+              ? "Selecciona un cliente para ver ventas, transacciones y saldos."
+              : section === "ventas"
+              ? "Filtra ventas por fecha, moneda, cliente y saldo pendiente."
+              : section === "transacciones"
+              ? "Filtra transacciones por fecha, moneda y monto mínimo."
+              : "Filtra transacciones por banco, fecha y moneda.";
+        }
+
+        if (fechaInicioLabel) {
+          fechaInicioLabel.textContent = "Fecha Elaboración";
+        }
+
+        if (fechaFinGroup && fechaFinLabel) {
+          if (section === "ventas" || section === "clientes") {
+            fechaFinGroup.classList.remove("hidden");
+            fechaFinLabel.textContent = "Fecha Vencimiento";
+          } else {
+            fechaFinGroup.classList.add("hidden");
+            const fechaFinInput = document.getElementById("filter-fecha-fin");
+            if (fechaFinInput) fechaFinInput.value = "";
+          }
+        }
+
+        const visible = new Set([
+          "fecha_inicio",
+          ...(section === "ventas" || section === "clientes" ? ["fecha_fin"] : []),
+          ...(section === "clientes" ? ["cliente"] : []),
+          ...(section === "ventas" ? ["cliente", "moneda", "slider"] : []),
+          ...(section === "transacciones" ? ["moneda", "slider"] : []),
+          ...(section === "bancos" ? ["banco", "moneda"] : [])
+        ]);
+
+        document.querySelectorAll('.filter-group[data-filter]').forEach((group) => {
+          const key = group.dataset.filter;
+          const show = visible.has(key);
+          group.classList.toggle('hidden', !show);
+          if (!show) {
+            const input = group.querySelector('select,input');
+            if (input) input.value = '';
+          }
+        });
+
+        // Configurar slider
+        const sliderWrap = document.querySelector('.filter-group[data-filter="slider"]');
+        const slider = document.getElementById('filter-slider');
+        const sliderLabel = document.getElementById('filter-slider-label');
+        const sliderMin = document.getElementById('filter-slider-min');
+        const sliderMax = document.getElementById('filter-slider-max');
+        const sliderVal = document.getElementById('filter-slider-value');
+
+        if (sliderWrap && slider && sliderLabel && sliderMin && sliderMax && sliderVal) {
+          if (section === 'ventas') {
+            sliderWrap.dataset.sliderMode = 'ventas_saldo';
+            sliderLabel.textContent = 'Saldo pendiente (mínimo)';
+            const max = Math.max(0, ...((currentData.ventas || []).map((v) => Number(v.saldo_venta || 0))));
+            slider.min = '0';
+            slider.max = String(Math.ceil(max));
+            slider.step = String(Math.max(1, Math.ceil(max / 100) || 1));
+            const sliderInput = document.getElementById('filter-slider-input');
+            if (sliderInput) {
+              sliderInput.min = '0';
+              sliderInput.max = String(Math.ceil(max));
+              sliderInput.step = '0.01';
+              sliderInput.value = '0';
+            }
+            slider.value = '0';
+            sliderMin.textContent = formatCurrency(0, 0);
+            sliderMax.textContent = formatCurrency(max || 0, 0);
+            sliderVal.textContent = formatCurrency(0, 0);
+          } else if (section === 'transacciones') {
+            sliderWrap.dataset.sliderMode = 'tx_monto';
+            sliderLabel.textContent = 'Monto (mínimo)';
+            const max = Math.max(0, ...((currentData.transacciones || []).map((t) => Number(t.valor || 0))));
+            slider.min = '0';
+            slider.max = String(Math.ceil(max));
+            slider.step = String(Math.max(1, Math.ceil(max / 100) || 1));
+            const sliderInput = document.getElementById('filter-slider-input');
+            if (sliderInput) {
+              sliderInput.min = '0';
+              sliderInput.max = String(Math.ceil(max));
+              sliderInput.step = '0.01';
+              sliderInput.value = '0';
+            }
+            slider.value = '0';
+            sliderMin.textContent = formatCurrency(0, 0);
+            sliderMax.textContent = formatCurrency(max || 0, 0);
+            sliderVal.textContent = formatCurrency(0, 0);
+          }
+        }
+
+        // Asignación manual: solo en Clientes (y requiere cliente)
+        const manualWrap = document.getElementById('manual-apply-wrap');
+        const manualRes = document.getElementById('manual-apply-result');
+        const clienteId = document.getElementById('filter-cliente')?.value || '';
+        const showManual = section === 'clientes' && !!clienteId;
+
+        if (manualWrap) manualWrap.classList.toggle('hidden', !showManual);
+        if (manualRes && !showManual) {
+          manualRes.classList.add('hidden');
+          manualRes.innerHTML = '';
+        }
+
+        if (showManual) {
+          refreshManualApplyOptions();
+        }
+      }
+
+      function refreshManualApplyOptions() {
+        const wrap = document.getElementById('manual-apply-wrap');
+        const selTx = document.getElementById('manual-tx');
+        const selVenta = document.getElementById('manual-venta');
+        const inputValor = document.getElementById('manual-valor');
+        const btn = document.getElementById('btn-manual-aplicar');
+        const res = document.getElementById('manual-apply-result');
+        const clienteId = document.getElementById('filter-cliente')?.value || '';
+
+        if (!wrap || !selTx || !selVenta || !inputValor || !btn) return;
+
+        const ventasPend = (currentDataRaw.ventas || [])
+          .filter((v) => Number(v.saldo_venta || 0) > 0)
+          .map((v) => ({
+            id: String(v.id_venta),
+            moneda: v.moneda || '',
+            saldo: Number(v.saldo_venta || 0),
+            label: `#${v.id_venta} — ${formatDate(v.fecha_elaboracion)} — Saldo ${formatCurrency(Number(v.saldo_venta || 0), 0)} — ${v.moneda || ''}`
+          }));
+
+        const txSaldo = (currentDataRaw.transacciones || [])
+          .filter((t) => Number(t.saldo_transaccion || 0) > 0)
+          .map((t) => ({
+            id: String(t.id_transaccion),
+            moneda: t.moneda || '',
+            saldo: Number(t.saldo_transaccion || 0),
+            label: `#${t.id_transaccion} — ${formatDate(t.fecha)} — Saldo ${formatCurrency(Number(t.saldo_transaccion || 0), 0)} — ${t.moneda || ''}`
+          }));
+
+        selTx.innerHTML = '';
+        selVenta.innerHTML = '';
+
+        const optEmptyTx = document.createElement('option');
+        optEmptyTx.value = '';
+        optEmptyTx.textContent = txSaldo.length ? 'Selecciona una transacción' : 'No hay transacciones con saldo';
+        selTx.appendChild(optEmptyTx);
+        txSaldo.forEach((t) => {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = t.label;
+          opt.dataset.saldo = String(t.saldo);
+          opt.dataset.moneda = t.moneda;
+          selTx.appendChild(opt);
+        });
+
+        const optEmptyV = document.createElement('option');
+        optEmptyV.value = '';
+        optEmptyV.textContent = ventasPend.length ? 'Selecciona una venta' : 'No hay ventas con saldo pendiente';
+        selVenta.appendChild(optEmptyV);
+        ventasPend.forEach((v) => {
+          const opt = document.createElement('option');
+          opt.value = v.id;
+          opt.textContent = v.label;
+          opt.dataset.saldo = String(v.saldo);
+          opt.dataset.moneda = v.moneda;
+          selVenta.appendChild(opt);
+        });
+
+        const canUse = currentSection === 'clientes' && !!clienteId && txSaldo.length > 0 && ventasPend.length > 0;
+        btn.disabled = true;
+        inputValor.value = '';
+        if (res) {
+          res.classList.add('hidden');
+          res.innerHTML = '';
+        }
+
+        // Si no hay data suficiente, dejar controles sin acción
+        if (!canUse) return;
+
+        // Recalcular estado (requiere selección explícita)
+        setTimeout(() => {
+          document.getElementById('manual-tx')?.dispatchEvent(new Event('change'));
+        }, 0);
+      }
+
+      // ==========================================
+      // EVENT LISTENERS
+      // ==========================================
+
+      document.getElementById("btn-aplicar-filtros").addEventListener("click", applyFilters);
+
+      const sliderEl = document.getElementById('filter-slider');
+      sliderEl?.addEventListener('input', () => {
+        setSliderFilterValue(Number(sliderEl.value || 0));
+        applyLocalSliderFilter();
+        updateStatistics();
+        renderTablesData();
+        updateCharts();
+      });
+
+      const sliderInputEl = document.getElementById('filter-slider-input');
+      sliderInputEl?.addEventListener('input', () => {
+        setSliderFilterValue(Number(sliderInputEl.value || 0));
+        // Refiltrar localmente (sin re-consultar al backend)
+        applyLocalSliderFilter();
+        updateStatistics();
+        renderTablesData();
+        updateCharts();
+      });
+
+      // En Clientes, aplicar automáticamente al seleccionar un cliente
+      document.getElementById('filter-cliente')?.addEventListener('change', () => {
+        if (currentSection === 'clientes') {
+          syncFilterUIForSection('clientes');
+          applyFilters();
+        }
+      });
+
+      // Actualizar disponibilidad y sugerir valor
+      document.getElementById('manual-tx')?.addEventListener('change', () => {
+        const selTx = document.getElementById('manual-tx');
+        const selVenta = document.getElementById('manual-venta');
+        const inputValor = document.getElementById('manual-valor');
+        const btn = document.getElementById('btn-manual-aplicar');
+        if (!selTx || !selVenta || !inputValor || !btn) return;
+        const txOpt = selTx.selectedOptions?.[0];
+        const vOpt = selVenta.selectedOptions?.[0];
+        const txSaldo = Number(txOpt?.dataset?.saldo || 0);
+        const vSaldo = Number(vOpt?.dataset?.saldo || 0);
+        const txMon = txOpt?.dataset?.moneda || '';
+        const vMon = vOpt?.dataset?.moneda || '';
+        const ok = selTx.value && selVenta.value && txSaldo > 0 && vSaldo > 0 && txMon === vMon;
+        btn.disabled = !ok;
+        if (ok && !inputValor.value) {
+          inputValor.value = String(Math.min(txSaldo, vSaldo));
+        }
+      });
+
+      document.getElementById('manual-venta')?.addEventListener('change', () => {
+        const ev = new Event('change');
+        document.getElementById('manual-tx')?.dispatchEvent(ev);
+      });
+
+      // Aplicar manualmente a UNA venta
+      document.getElementById('btn-manual-aplicar')?.addEventListener('click', async () => {
+        try {
+          if (currentSection !== 'clientes') return;
+          const clienteId = document.getElementById('filter-cliente')?.value || '';
+          const selTx = document.getElementById('manual-tx');
+          const selVenta = document.getElementById('manual-venta');
+          const inputValor = document.getElementById('manual-valor');
+          const btn = document.getElementById('btn-manual-aplicar');
+          const res = document.getElementById('manual-apply-result');
+          if (!clienteId || !selTx || !selVenta || !inputValor || !btn || !res) return;
+
+          const idTransaccion = selTx.value;
+          const idVenta = selVenta.value;
+          const valor = Number(inputValor.value || 0);
+          if (!idTransaccion || !idVenta) {
+            alert('Selecciona una transacción y una venta');
+            return;
+          }
+          if (!Number.isFinite(valor) || valor <= 0) {
+            alert('Ingresa un valor válido');
+            return;
+          }
+
+          btn.disabled = true;
+          res.classList.remove('hidden');
+          res.innerHTML = '<span class="inline-flex items-center gap-2"><span class="loading-spinner"></span>Aplicando...</span>';
+
+          const resp = await apiFetchOrAuth(`${API_URL}/aplicaciones`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id_transaccion: Number(idTransaccion),
+              id_venta: Number(idVenta),
+              valor_aplicado: valor
+            })
+          });
+          const json = await resp.json().catch(() => ({}));
+          if (!resp.ok || !json.success) {
+            throw new Error(json?.message || 'No se pudo aplicar');
+          }
+
+          res.innerHTML = `<strong>Listo.</strong> Aplicado ${formatCurrency(Number(json?.data?.valor_aplicado || 0), 0)} a la venta #${idVenta}.`;
+          btn.disabled = false;
+
+          // Refrescar data, y repoblar combos
+          await applyFilters();
+          refreshManualApplyOptions();
+        } catch (err) {
+          console.error('Error aplicando manual:', err);
+          alert('Error aplicando: ' + (err?.message || err));
+          const btn = document.getElementById('btn-manual-aplicar');
+          if (btn) btn.disabled = false;
+        }
+      });
+      
+      document.getElementById("btn-limpiar-filtros").addEventListener("click", () => {
+        document.getElementById("filter-cliente").value = "";
+        document.getElementById("filter-moneda").value = "";
+        document.getElementById("filter-banco").value = "";
+        document.getElementById("filter-fecha-inicio").value = "";
+        document.getElementById("filter-fecha-fin").value = "";
+        const slider = document.getElementById('filter-slider');
+        const sliderInput = document.getElementById('filter-slider-input');
+        if (slider) slider.value = '0';
+        if (sliderInput) sliderInput.value = '0';
+        syncFilterUIForSection(currentSection);
+        applyFilters();
+      });
+
+      function setupFiltersCollapse() {
+        const toggle = document.getElementById("filters-toggle");
+        const body = document.getElementById("filters-body");
+        const icon = document.getElementById("filters-toggle-icon");
+        const text = document.getElementById("filters-toggle-text");
+        if (!toggle || !body) return;
+
+        let collapsed = false;
+        const render = () => {
+          body.classList.toggle("hidden", collapsed);
+          if (icon) icon.textContent = collapsed ? "expand_more" : "expand_less";
+          if (text) text.textContent = collapsed ? "Expandir" : "Contraer";
+        };
+
+        toggle.addEventListener("click", () => {
+          collapsed = !collapsed;
+          render();
+        });
+
+        render();
+      }
+
+      // Tabs
+      document.querySelectorAll(".tab-button").forEach(button => {
+        button.addEventListener("click", (e) => {
+          const tabName = e.currentTarget.dataset.tab;
+          
+          document.querySelectorAll(".tab-button").forEach(b => {
+            b.classList.remove("active");
+            b.style.borderColor = "transparent";
+            b.style.color = "#64748b";
+          });
+          
+          document.querySelectorAll(".tab-content").forEach(content => {
+            content.classList.add("hidden");
+          });
+          
+          e.currentTarget.classList.add("active");
+          e.currentTarget.style.borderColor = "var(--accent)";
+          e.currentTarget.style.color = "var(--primary)";
+          document.getElementById(`tab-${tabName}`).classList.remove("hidden");
+        });
+      });
+
+      // Export
+      document.getElementById("btn-export").addEventListener("click", () => {
+        const ventasCb = document.getElementById("export-tabla-ventas");
+        const txCb = document.getElementById("export-tabla-transacciones");
+
+        // Sugerir datos según sección (más control)
+        if (ventasCb && txCb) {
+          if (currentSection === 'ventas') {
+            ventasCb.checked = true;
+            ventasCb.disabled = true;
+            txCb.checked = false;
+            txCb.disabled = true;
+          } else if (currentSection === 'transacciones' || currentSection === 'bancos') {
+            ventasCb.checked = false;
+            ventasCb.disabled = true;
+            txCb.checked = true;
+            txCb.disabled = true;
+          } else {
+            // clientes
+            ventasCb.checked = true;
+            txCb.checked = true;
+            ventasCb.disabled = false;
+            txCb.disabled = false;
+          }
+        }
+
+        // Reset UI del modal
+        document.getElementById("export-result").classList.add("hidden");
+        document.getElementById("export-progress").style.display = "none";
+        document.getElementById("export-modal").classList.add("active");
+      });
+
+      document.getElementById("close-export-modal").addEventListener("click", () => {
+        document.getElementById("export-modal").classList.remove("active");
+      });
+
+      document.getElementById("btn-cerrar-modal").addEventListener("click", () => {
+        document.getElementById("export-modal").classList.remove("active");
+      });
+
+      const setExportProgress = (pct, text) => {
+        const wrap = document.getElementById('export-progress');
+        const fill = document.getElementById('progress-bar-fill');
+        if (wrap) wrap.style.display = 'block';
+        if (fill) fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+        const p = wrap?.querySelector('p');
+        if (p && text) p.textContent = text;
+      };
+
+      const showExportResult = (blobUrl, filename) => {
+        const link = document.getElementById('export-download-link');
+        if (link) {
+          link.href = blobUrl;
+          link.download = filename;
+        }
+        document.getElementById('export-result').classList.remove('hidden');
+        document.getElementById('export-progress').style.display = 'none';
+      };
+
+      function buildExportParams({ format, includeVentas, includeTransacciones, includeSaldos }) {
+        const params = new URLSearchParams();
+
+        // Usar filtros actuales (los que se aplican en pantalla)
+        const f = { ...(currentFilters || {}) };
+        Object.keys(f).forEach((k) => {
+          if (f[k] === undefined || f[k] === null || String(f[k]).trim() === '') return;
+          params.set(k, String(f[k]));
+        });
+
+        params.set('format', format);
+        params.set('include_ventas', includeVentas ? '1' : '0');
+        params.set('include_transacciones', includeTransacciones ? '1' : '0');
+        params.set('include_saldos', includeSaldos ? '1' : '0');
+        return params;
+      }
+
+      function addVentasTableToPdf(doc, { includeSaldos, includeTotales, title }) {
+        const columns = [
+          { header: "# Venta", dataKey: "id_venta" },
+          { header: "Cliente", dataKey: "cliente_nombre" },
+          { header: "NIT", dataKey: "cliente_nit" },
+          { header: "Fecha Elaboración", dataKey: "fecha_elaboracion" },
+          { header: "Fecha Vencimiento", dataKey: "fecha_vencimiento" },
+          { header: "Comprobante", dataKey: "comprobante" },
+          { header: "Tipo", dataKey: "tipo_transaccion" },
+          { header: "Moneda", dataKey: "moneda" },
+          { header: "Total", dataKey: "total" },
+          { header: "Aplicado", dataKey: "total_aplicado" }
+        ];
+        if (includeSaldos) columns.push({ header: "Saldo", dataKey: "saldo_venta" });
+        columns.push({ header: "Estado", dataKey: "estado_envio_correo" });
+
+        const tableData = (currentData.ventas || []).slice().sort((a, b) => {
+          const clienteA = String(a.cliente_nombre || '').toLocaleLowerCase('es');
+          const clienteB = String(b.cliente_nombre || '').toLocaleLowerCase('es');
+          if (clienteA !== clienteB) return clienteA.localeCompare(clienteB, 'es');
+          return Number(b.id_venta || 0) - Number(a.id_venta || 0);
+        }).map(v => ({
+          ...v,
+          fecha_elaboracion: formatDate(v.fecha_elaboracion),
+          fecha_vencimiento: formatDate(v.fecha_vencimiento),
+          total: formatCurrency(v.total),
+          total_aplicado: formatCurrency(v.total_aplicado),
+          saldo_venta: formatCurrency(v.saldo_venta)
+        }));
+
+        doc.setFontSize(16);
+        doc.text(title, 40, 40);
+        doc.autoTable({
+          startY: 60,
+          head: [columns.map(c => c.header)],
+          body: tableData.map(row => columns.map(c => row[c.dataKey])),
+          styles: { fontSize: 9, cellPadding: 3 },
+          headStyles: { fillColor: [22, 160, 133] },
+          margin: { left: 40, right: 40 }
+        });
+
+        if (includeTotales) {
+          const totalRow = columns.map(c => {
+            if (c.dataKey === "total") return formatCurrency((currentData.ventas || []).reduce((a, v) => a + Number(v.total || 0), 0));
+            if (c.dataKey === "total_aplicado") return formatCurrency((currentData.ventas || []).reduce((a, v) => a + Number(v.total_aplicado || 0), 0));
+            if (c.dataKey === "saldo_venta") return formatCurrency((currentData.ventas || []).reduce((a, v) => a + Number(v.saldo_venta || 0), 0));
+            return "";
+          });
+
+          doc.autoTable({
+            startY: doc.lastAutoTable.finalY + 10,
+            head: [["Totales"]],
+            body: [totalRow],
+            styles: { fontStyle: 'bold', fontSize: 10, cellPadding: 3 },
+            headStyles: { fillColor: [22, 160, 133] },
+            margin: { left: 40, right: 40 }
+          });
+        }
+      }
+
+      function addTransaccionesTableToPdf(doc, { includeSaldos, includeTotales, title }) {
+        const columns = [
+          { header: "# Tx", dataKey: "id_transaccion" },
+          { header: "Cliente", dataKey: "cliente_nombre" },
+          { header: "NIT", dataKey: "cliente_nit" },
+          { header: "Fecha", dataKey: "fecha" },
+          { header: "Descripción", dataKey: "descripcion" },
+          { header: "Banco", dataKey: "banco_nombre" },
+          { header: "Moneda", dataKey: "moneda" },
+          { header: "Monto", dataKey: "valor" },
+          { header: "Aplicado", dataKey: "total_aplicado" }
+        ];
+        if (includeSaldos) columns.push({ header: "Saldo", dataKey: "saldo_transaccion" });
+
+        const tableData = (currentData.transacciones || []).slice().sort((a, b) => {
+          const clienteA = String(a.cliente_nombre || '').toLocaleLowerCase('es');
+          const clienteB = String(b.cliente_nombre || '').toLocaleLowerCase('es');
+          if (clienteA !== clienteB) return clienteA.localeCompare(clienteB, 'es');
+          return Number(b.id_transaccion || 0) - Number(a.id_transaccion || 0);
+        }).map(t => ({
+          ...t,
+          fecha: formatDate(t.fecha),
+          valor: formatCurrency(t.valor),
+          total_aplicado: formatCurrency(t.total_aplicado),
+          saldo_transaccion: formatCurrency(t.saldo_transaccion)
+        }));
+
+        doc.setFontSize(16);
+        doc.text(title, 40, 40);
+        doc.autoTable({
+          startY: 60,
+          head: [columns.map(c => c.header)],
+          body: tableData.map(row => columns.map(c => row[c.dataKey])),
+          styles: { fontSize: 9, cellPadding: 3 },
+          headStyles: { fillColor: [22, 160, 133] },
+          margin: { left: 40, right: 40 }
+        });
+
+        if (includeTotales) {
+          const totalRow = columns.map(c => {
+            if (c.dataKey === "valor") return formatCurrency((currentData.transacciones || []).reduce((a, t) => a + Number(t.valor || 0), 0));
+            if (c.dataKey === "total_aplicado") return formatCurrency((currentData.transacciones || []).reduce((a, t) => a + Number(t.total_aplicado || 0), 0));
+            if (c.dataKey === "saldo_transaccion") return formatCurrency((currentData.transacciones || []).reduce((a, t) => a + Number(t.saldo_transaccion || 0), 0));
+            return "";
+          });
+
+          doc.autoTable({
+            startY: doc.lastAutoTable.finalY + 10,
+            head: [["Totales"]],
+            body: [totalRow],
+            styles: { fontStyle: 'bold', fontSize: 10, cellPadding: 3 },
+            headStyles: { fillColor: [22, 160, 133] },
+            margin: { left: 40, right: 40 }
+          });
+        }
+      }
+
+      document.getElementById("btn-generar-export").addEventListener("click", async function () {
+        try {
+          const format = document.querySelector('input[name="export-format"]:checked')?.value || 'pdf';
+
+          const includeSaldos = document.getElementById('export-include-saldos')?.checked ?? true;
+          const includeTotales = document.getElementById('export-include-totales')?.checked ?? true;
+          const includeVentas = document.getElementById('export-tabla-ventas')?.checked ?? false;
+          const includeTransacciones = document.getElementById('export-tabla-transacciones')?.checked ?? false;
+
+          if (!includeVentas && !includeTransacciones) {
+            alert('Selecciona al menos Ventas o Transacciones.');
+            return;
+          }
+          if (format === 'csv' && includeVentas && includeTransacciones) {
+            alert('CSV solo permite Ventas o Transacciones (no ambos).');
+            return;
+          }
+
+          document.getElementById("export-result").classList.add("hidden");
+          setExportProgress(10, 'Generando reporte...');
+
+          // PDF: siempre tabular horizontal, sin gráficas
+          if (format === 'pdf') {
+            const doc = new window.jspdf.jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+            const today = new Date().toISOString().slice(0, 10);
+
+            if (includeVentas) {
+              addVentasTableToPdf(doc, {
+                includeSaldos,
+                includeTotales,
+                title: currentSection === 'clientes' ? 'Cliente — Ventas' : 'Ventas'
+              });
+            }
+            if (includeTransacciones) {
+              if (includeVentas) doc.addPage();
+              addTransaccionesTableToPdf(doc, {
+                includeSaldos,
+                includeTotales,
+                title: currentSection === 'clientes' ? 'Cliente — Transacciones' : (currentSection === 'bancos' ? 'Bancos — Transacciones' : 'Transacciones')
+              });
+            }
+
+            const filename = `reporte_${currentSection}_${today}.pdf`;
+            const blob = doc.output('blob');
+            const blobUrl = URL.createObjectURL(blob);
+            showExportResult(blobUrl, filename);
+            setExportProgress(100, 'Listo para descarga');
+            return;
+          }
+
+          // XLSX/CSV: descargar del backend (tabular)
+          const params = buildExportParams({
+            format,
+            includeVentas,
+            includeTransacciones,
+            includeSaldos
+          });
+
+          setExportProgress(40, 'Preparando descarga...');
+          const url = `${API_URL}/reportes/export?${params.toString()}`;
+          const resp = await fetch(url);
+          if (!resp.ok) {
+            const text = await resp.text();
+            throw new Error(text || 'Error exportando');
+          }
+
+          setExportProgress(80, 'Descargando archivo...');
+          const blob = await resp.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const today = new Date().toISOString().slice(0, 10);
+          const filename = `reporte_${currentSection}_${today}.${format}`;
+          showExportResult(blobUrl, filename);
+          setExportProgress(100, 'Listo para descarga');
+        } catch (error) {
+          console.error('Error exportando:', error);
+          alert('Error al exportar: ' + (error?.message || error));
+          document.getElementById('export-progress').style.display = 'none';
+        }
+      });
+
+      // Toggle opciones según formato
+      document.querySelectorAll('input[name="export-format"]').forEach((input) => {
+        input.addEventListener("change", () => {
+          const format = document.querySelector('input[name="export-format"]:checked')?.value || "pdf";
+          const pdfOptions = document.getElementById("export-pdf-options");
+          if (pdfOptions) {
+            pdfOptions.style.display = format === "pdf" ? "block" : "none";
+          }
+        });
+      });
+
+      // ==========================================
+      // INICIAR APLICACIÓN
+      // ==========================================
+      
+      document.addEventListener("DOMContentLoaded", () => {
+        setupFiltersCollapse();
+        initializeReports();
+      });
+    </script>
+  </body>
+</html>

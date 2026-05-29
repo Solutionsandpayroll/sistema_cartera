@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema Cartera | Backup</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,500,0,0" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+    <style>
+      .backup-hero {
+        margin-top: 0.9rem;
+        padding: 1.15rem 1.25rem;
+        border-radius: 1rem;
+        color: #fff;
+        background: linear-gradient(135deg, #102a47 0%, #173a62 100%);
+        box-shadow: 0 14px 30px rgba(16, 42, 71, 0.14);
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-end;
+      }
+
+      .backup-kicker {
+        margin: 0 0 0.35rem;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255, 255, 255, 0.78);
+        font-weight: 700;
+      }
+
+      .backup-hero h2 {
+        margin: 0;
+        font-size: 1.3rem;
+        letter-spacing: -0.02em;
+      }
+
+      .backup-hero p {
+        margin: 0.35rem 0 0;
+        color: rgba(255, 255, 255, 0.84);
+        max-width: 44rem;
+      }
+
+      .backup-actions {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .backup-status {
+        margin-top: 1rem;
+        border-radius: 0.9rem;
+        border: 1px solid #dce4ed;
+        background: #f8fbff;
+        padding: 0.95rem 1rem;
+        color: #304763;
+      }
+
+      .backup-status.is-ok {
+        border-color: #cce8d3;
+        background: #effaf1;
+        color: #166534;
+      }
+
+      .backup-status.is-error {
+        border-color: #f5c8d0;
+        background: #fff1f3;
+        color: #9f1239;
+      }
+
+      .backup-status-title {
+        margin: 0 0 0.15rem;
+        font-weight: 800;
+      }
+
+      .backup-status-copy {
+        margin: 0;
+        font-size: 0.88rem;
+      }
+
+      .backup-note {
+        margin-top: 0.8rem;
+        font-size: 0.82rem;
+        color: #667b94;
+      }
+
+      .backup-last-sync {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        padding: 0.45rem 0.75rem;
+        color: rgba(255, 255, 255, 0.94);
+        font-weight: 700;
+        font-size: 0.85rem;
+      }
+
+      .backup-button[disabled] {
+        opacity: 0.68;
+        cursor: progress;
+      }
+
+      @media (max-width: 900px) {
+        .backup-hero {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .backup-actions {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-surface text-slate-800">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <div class="brand">
+            <div class="brand-mark">SC</div>
+            <div>
+              <p class="brand-title">Sistema Cartera</p>
+              <p class="brand-subtitle">Panel operativo</p>
+            </div>
+          </div>
+
+          <nav class="menu" aria-label="Navegacion principal">
+            <a class="menu-item" href="home.html">
+              <span class="material-symbols-outlined">home</span>
+              <span>Home</span>
+            </a>
+            <a class="menu-item" href="ventas.html">
+              <span class="material-symbols-outlined">payments</span>
+              <span>Ventas</span>
+            </a>
+            <a class="menu-item" href="transacciones.html">
+              <span class="material-symbols-outlined">receipt_long</span>
+              <span>Transacciones</span>
+            </a>
+            <a class="menu-item" href="reportes.html">
+              <span class="material-symbols-outlined">bar_chart</span>
+              <span>Reportes</span>
+            </a>
+            <a class="menu-item is-active" href="backup.html">
+              <span class="material-symbols-outlined">inventory_2</span>
+              <span>Backup</span>
+            </a>
+          </nav>
+        </div>
+
+        <div class="session-box">
+          <div class="session-top">
+            <div class="session-avatar" aria-hidden="true">
+              <span class="material-symbols-outlined">person</span>
+            </div>
+            <p class="session-user is-hidden" id="session-user"></p>
+            <p class="session-role is-hidden" id="session-role">Operador</p>
+          </div>
+          <button class="session-action" id="btn-logout" type="button">
+            <span class="material-symbols-outlined">logout</span>
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <h1>Backup</h1>
+            <p>Descarga un respaldo completo y limpio con ventas, transacciones, clientes y bancos.</p>
+          </div>
+          <div class="topbar-actions">
+            <span class="backup-last-sync" id="backup-last-sync">Listo para generar</span>
+          </div>
+        </header>
+
+        <section class="content-wrap">
+          <section class="backup-hero">
+            <div>
+              <p class="backup-kicker">Respaldo completo</p>
+              <h2>Un solo archivo con tablas reales de todo el sistema</h2>
+              <p>El PDF se genera como informe tabular, sin capturas. XLSX y CSV incluyen las cuatro secciones completas.</p>
+            </div>
+            <div class="backup-actions">
+              <button class="btn-primary backup-button" id="backup-pdf" type="button">
+                <span class="material-symbols-outlined">picture_as_pdf</span>
+                PDF
+              </button>
+              <button class="btn-secondary backup-button" id="backup-xlsx" type="button">
+                <span class="material-symbols-outlined">table_view</span>
+                XLSX
+              </button>
+              <button class="btn-secondary backup-button" id="backup-csv" type="button">
+                <span class="material-symbols-outlined">csv</span>
+                CSV
+              </button>
+            </div>
+          </section>
+
+          <div class="kpi-grid" style="margin-top: 1rem;">
+            <article class="kpi-card">
+              <p class="kpi-label">Ventas</p>
+              <p class="kpi-value" id="backup-kpi-ventas">0</p>
+              <p class="kpi-meta">Todas las filas de ventas</p>
+            </article>
+            <article class="kpi-card">
+              <p class="kpi-label">Transacciones</p>
+              <p class="kpi-value" id="backup-kpi-transacciones">0</p>
+              <p class="kpi-meta">Abonos y movimientos</p>
+            </article>
+            <article class="kpi-card">
+              <p class="kpi-label">Clientes</p>
+              <p class="kpi-value" id="backup-kpi-clientes">0</p>
+              <p class="kpi-meta">Maestro de clientes</p>
+            </article>
+            <article class="kpi-card">
+              <p class="kpi-label">Bancos</p>
+              <p class="kpi-value" id="backup-kpi-bancos">0</p>
+              <p class="kpi-meta">Catálogo bancario</p>
+            </article>
+          </div>
+
+          <div class="data-card">
+            <div class="data-card-header">
+              <div>
+                <h2>Estado de exportación</h2>
+                <p>Genera el archivo directamente desde los datos actuales del sistema.</p>
+              </div>
+            </div>
+            <div style="padding: 1rem 0.95rem 1.05rem;">
+              <div class="backup-status" id="backup-status" aria-live="polite">
+                <p class="backup-status-title" id="backup-status-title">Cargando datos</p>
+                <p class="backup-status-copy" id="backup-status-copy">El sistema está reuniendo los registros para el respaldo.</p>
+              </div>
+              <p class="backup-note">El PDF se arma como documento de reporte con tablas nativas, encabezado y pies de página.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="auth-guard.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+      const state = {
+        ventas: [],
+        transacciones: [],
+        clientes: [],
+        bancos: []
+      };
+
+      const elements = {
+        status: document.getElementById("backup-status"),
+        statusTitle: document.getElementById("backup-status-title"),
+        statusCopy: document.getElementById("backup-status-copy"),
+        lastSync: document.getElementById("backup-last-sync"),
+        ventas: document.getElementById("backup-kpi-ventas"),
+        transacciones: document.getElementById("backup-kpi-transacciones"),
+        clientes: document.getElementById("backup-kpi-clientes"),
+        bancos: document.getElementById("backup-kpi-bancos"),
+        pdfBtn: document.getElementById("backup-pdf"),
+        xlsxBtn: document.getElementById("backup-xlsx"),
+        csvBtn: document.getElementById("backup-csv")
+      };
+
+      const buttonList = [elements.pdfBtn, elements.xlsxBtn, elements.csvBtn].filter(Boolean);
+
+      const setStatus = (kind, title, copy) => {
+        if (elements.status) {
+          elements.status.classList.remove("is-ok", "is-error");
+          if (kind === "ok") elements.status.classList.add("is-ok");
+          if (kind === "error") elements.status.classList.add("is-error");
+        }
+        if (elements.statusTitle) elements.statusTitle.textContent = title;
+        if (elements.statusCopy) elements.statusCopy.textContent = copy;
+      };
+
+      const setBusy = (busy) => {
+        buttonList.forEach((button) => {
+          button.disabled = busy;
+        });
+        if (elements.lastSync) {
+          elements.lastSync.textContent = busy ? "Generando..." : "Listo para generar";
+        }
+      };
+
+      const fetchJson = async (url) => {
+        const response = await fetch(url, { credentials: "include" });
+        if (!response.ok) {
+          throw new Error(`Error ${response.status} al consultar ${url}`);
+        }
+        return response.json();
+      };
+
+      const prettyDateTime = (value = new Date()) =>
+        new Intl.DateTimeFormat("es-CO", {
+          dateStyle: "medium",
+          timeStyle: "short"
+        }).format(new Date(value));
+
+      const formatMoney = (value) =>
+        new Intl.NumberFormat("es-CO", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2
+        }).format(Number(value || 0));
+
+      const downloadBlob = (blob, filename) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+      };
+
+      const updateSummary = () => {
+        if (elements.ventas) elements.ventas.textContent = String(state.ventas.length);
+        if (elements.transacciones) elements.transacciones.textContent = String(state.transacciones.length);
+        if (elements.clientes) elements.clientes.textContent = String(state.clientes.length);
+        if (elements.bancos) elements.bancos.textContent = String(state.bancos.length);
+      };
+
+      const loadBackupData = async () => {
+        setStatus("", "Cargando datos", "Reuniendo ventas, transacciones, clientes y bancos.");
+        const [reportes, clientes, bancos] = await Promise.all([
+          fetchJson("/api/reportes/datos?tipo_dato=ambos"),
+          fetchJson("/api/clientes"),
+          fetchJson("/api/bancos")
+        ]);
+
+        state.ventas = Array.isArray(reportes?.data?.ventas) ? reportes.data.ventas : [];
+        state.transacciones = Array.isArray(reportes?.data?.transacciones) ? reportes.data.transacciones : [];
+        state.clientes = Array.isArray(clientes?.data) ? clientes.data : [];
+        state.bancos = Array.isArray(bancos?.data) ? bancos.data : [];
+
+        updateSummary();
+        setStatus(
+          "ok",
+          "Datos listos",
+          `Respaldo preparado con ${state.ventas.length} ventas, ${state.transacciones.length} transacciones, ${state.clientes.length} clientes y ${state.bancos.length} bancos.`
+        );
+        if (elements.lastSync) {
+          elements.lastSync.textContent = prettyDateTime();
+        }
+      };
+
+      const buildPdf = () => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const primary = [16, 42, 71];
+        const accent = [229, 17, 72];
+
+        const drawFooter = () => {
+          const pageCount = doc.internal.getNumberOfPages();
+          for (let page = 1; page <= pageCount; page += 1) {
+            doc.setPage(page);
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Sistema Cartera · Backup`, 40, pageHeight - 20);
+            doc.text(`Página ${page} de ${pageCount}`, pageWidth - 110, pageHeight - 20);
+          }
+        };
+
+        const addCover = () => {
+          doc.setFillColor(...primary);
+          doc.rect(0, 0, pageWidth, 96, "F");
+          doc.setTextColor(255, 255, 255);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(22);
+          doc.text("Sistema Cartera", 40, 40);
+          doc.setFontSize(15);
+          doc.text("Backup general", 40, 66);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10);
+          doc.text("Ventas, transacciones, clientes y bancos en tablas nativas", 40, 84);
+
+          doc.setTextColor(31, 41, 55);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(18);
+          doc.text("Resumen", 40, 140);
+
+          const cards = [
+            { label: "Ventas", value: String(state.ventas.length) },
+            { label: "Transacciones", value: String(state.transacciones.length) },
+            { label: "Clientes", value: String(state.clientes.length) },
+            { label: "Bancos", value: String(state.bancos.length) }
+          ];
+
+          const cardWidth = (pageWidth - 120) / 2;
+          const cardHeight = 64;
+          cards.forEach((card, index) => {
+            const col = index % 2;
+            const row = Math.floor(index / 2);
+            const x = 40 + col * (cardWidth + 40);
+            const y = 164 + row * (cardHeight + 18);
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(220, 228, 237);
+            doc.roundedRect(x, y, cardWidth, cardHeight, 10, 10, "FD");
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(9);
+            doc.setTextColor(100, 116, 139);
+            doc.text(card.label, x + 16, y + 20);
+            doc.setTextColor(...accent);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(24);
+            doc.text(card.value, x + 16, y + 46);
+          });
+
+          doc.setTextColor(100, 116, 139);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10);
+          doc.text(`Generado el ${prettyDateTime()}`, 40, 320);
+        };
+
+        const addSection = (title, subtitle, headers, bodyRows) => {
+          doc.addPage();
+          doc.setTextColor(16, 42, 71);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(16);
+          doc.text(title, 40, 40);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10);
+          doc.setTextColor(100, 116, 139);
+          doc.text(subtitle, 40, 58);
+
+          doc.autoTable({
+            startY: 76,
+            head: [headers],
+            body: bodyRows.length ? bodyRows : [headers.map((_, index) => (index === 0 ? "Sin registros" : ""))],
+            styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
+            headStyles: { fillColor: primary, textColor: 255 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: 40, right: 40 },
+            didDrawPage: () => {
+              doc.setDrawColor(...accent);
+              doc.setLineWidth(1.2);
+              doc.line(40, 66, pageWidth - 40, 66);
+            }
+          });
+        };
+
+        addCover();
+
+        addSection(
+          "Ventas",
+          "Detalle tabular de todas las ventas cargadas en el sistema.",
+          ["ID", "Cliente", "NIT", "Fecha", "Vencimiento", "Comprobante", "Tipo", "Moneda", "Total", "Aplicado", "Saldo", "Estado"],
+          state.ventas.map((row) => [
+            row.id_venta,
+            row.cliente_nombre,
+            row.cliente_nit,
+            row.fecha_elaboracion ? new Date(row.fecha_elaboracion).toLocaleDateString("es-CO") : "",
+            row.fecha_vencimiento ? new Date(row.fecha_vencimiento).toLocaleDateString("es-CO") : "",
+            row.comprobante || "-",
+            row.tipo_transaccion || "-",
+            row.moneda || "-",
+            formatMoney(row.total),
+            formatMoney(row.total_aplicado),
+            formatMoney(row.saldo_venta),
+            row.estado_envio_correo || "-"
+          ])
+        );
+
+        addSection(
+          "Transacciones",
+          "Detalle tabular de todos los movimientos y abonos registrados.",
+          ["ID", "Cliente", "NIT", "Fecha", "Descripción", "Banco", "Moneda", "Valor", "Aplicado", "Saldo"],
+          state.transacciones.map((row) => [
+            row.id_transaccion,
+            row.cliente_nombre,
+            row.cliente_nit,
+            row.fecha ? new Date(row.fecha).toLocaleDateString("es-CO") : "",
+            row.descripcion || row.nombre || "-",
+            row.banco_nombre || "-",
+            row.moneda || "-",
+            formatMoney(row.valor),
+            formatMoney(row.total_aplicado),
+            formatMoney(row.saldo_transaccion)
+          ])
+        );
+
+        addSection(
+          "Clientes",
+          "Listado maestro de clientes disponibles.",
+          ["ID", "Identificación", "Nombre"],
+          state.clientes.map((row) => [row.id_cliente, row.identificacion || "-", row.nombre || "-"])
+        );
+
+        addSection(
+          "Bancos",
+          "Catálogo de bancos configurados en el sistema.",
+          ["ID", "Código", "Nombre"],
+          state.bancos.map((row) => [row.id_banco, row.codigo || "-", row.nombre || "-"])
+        );
+
+        drawFooter();
+        return doc;
+      };
+
+      const runExport = async (format) => {
+        try {
+          setBusy(true);
+          setStatus("", "Generando exportación", `Preparando el archivo ${format.toUpperCase()}...`);
+
+          if (format === "pdf") {
+            const doc = buildPdf();
+            doc.save(`backup-${new Date().toISOString().split("T")[0]}.pdf`);
+            setStatus("ok", "PDF listo", "El informe se descargó como documento tabular real.");
+            return;
+          }
+
+          const response = await fetch(`/api/backup/export?format=${encodeURIComponent(format)}`, {
+            credentials: "include"
+          });
+
+          if (!response.ok) {
+            throw new Error(`No se pudo generar el archivo (${response.status})`);
+          }
+
+          const blob = await response.blob();
+          const ext = format === "xlsx" ? "xlsx" : "csv";
+          downloadBlob(blob, `backup-${new Date().toISOString().split("T")[0]}.${ext}`);
+          setStatus("ok", `${ext.toUpperCase()} listo`, "La descarga se generó con todas las tablas del respaldo.");
+        } catch (error) {
+          setStatus("error", "No se pudo generar el backup", error.message);
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      elements.pdfBtn?.addEventListener("click", () => runExport("pdf"));
+      elements.xlsxBtn?.addEventListener("click", () => runExport("xlsx"));
+      elements.csvBtn?.addEventListener("click", () => runExport("csv"));
+
+      loadBackupData().catch((error) => {
+        setStatus("error", "No se pudieron cargar los datos", error.message);
+      });
+    </script>
+  </body>
+</html>
