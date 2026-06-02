@@ -182,7 +182,13 @@
         <div class="preview-card">
           <div class="preview-header">
             <h3>Preview de registros extraidos</h3>
-            <span id="ventas-preview-count">0 filas</span>
+            <div class="filters preview-filters">
+              <select id="ventas-preview-filter" aria-label="Filtrar preview de ventas">
+                <option value="all">Todas las filas</option>
+                <option value="missing">Solo sin vencimiento</option>
+              </select>
+              <span id="ventas-preview-count">0 filas</span>
+            </div>
           </div>
           <div class="table-wrap preview-wrap">
             <table>

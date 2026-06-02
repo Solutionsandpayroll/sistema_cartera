@@ -132,6 +132,7 @@ if (ventasPage) {
     tableColumns: [],
     previewColumns: [],
     previewRows: [],
+    previewFilter: "all",
     records: [],
     dueDatesMap: new Map(),
     salesFileName: "",
@@ -149,6 +150,7 @@ if (ventasPage) {
   const dueFileNameLabel = document.getElementById("ventas-due-file-name");
   const importStatus = document.getElementById("ventas-import-status");
   const previewCount = document.getElementById("ventas-preview-count");
+  const previewFilter = document.getElementById("ventas-preview-filter");
   const previewHead = document.getElementById("ventas-preview-head");
   const previewBody = document.getElementById("ventas-preview-body");
   const applyImportButton = document.getElementById("ventas-apply-import");
@@ -201,6 +203,19 @@ if (ventasPage) {
 
   const normalizeDocumentKey = (value) =>
     normalizeKey(value).replace(/[^a-z0-9]/g, "");
+
+  const getPreviewMissingCount = () =>
+    state.previewRows.filter((row) => !parseDateInputValue(row.fecha_vencimiento)).length;
+
+  const getPreviewVisibleRows = () => {
+    const indexedRows = state.previewRows.map((row, rowIndex) => ({ row, rowIndex }));
+
+    if (state.previewFilter === "missing") {
+      return indexedRows.filter(({ row }) => !parseDateInputValue(row.fecha_vencimiento));
+    }
+
+    return indexedRows;
+  };
 
   const normalizeTwoDigitYear = (yearValue) => {
     const year = Number.parseInt(String(yearValue || ""), 10);
@@ -631,7 +646,11 @@ if (ventasPage) {
     const columns = ventasImportColumns;
     previewHead.innerHTML = `<tr>${columns.map((col) => `<th>${escapeHtml(col)}</th>`).join("")}</tr>`;
 
-    if (!state.previewRows.length) {
+    const totalRows = state.previewRows.length;
+    const missingCount = getPreviewMissingCount();
+    const visibleRows = getPreviewVisibleRows();
+
+    if (!totalRows) {
       previewBody.innerHTML = `<tr><td class="ventas-empty" colspan="${columns.length}">No hay preview aun.</td></tr>`;
       if (previewCount) {
         previewCount.textContent = "0 filas";
@@ -640,8 +659,19 @@ if (ventasPage) {
       return;
     }
 
-    previewBody.innerHTML = state.previewRows
-      .map((row, rowIndex) => {
+    if (!visibleRows.length) {
+      previewBody.innerHTML = `<tr><td class="ventas-empty" colspan="${columns.length}">No hay registros sin vencimiento para mostrar.</td></tr>`;
+      if (previewCount) {
+        previewCount.textContent = `${visibleRows.length} visibles de ${totalRows} filas · ${missingCount} sin vencimiento`;
+      }
+      previewBody.dataset.missingDueDates = String(missingCount);
+      previewBody.dataset.totalRows = String(totalRows);
+      refreshKpis();
+      return;
+    }
+
+    previewBody.innerHTML = visibleRows
+      .map(({ row, rowIndex }) => {
         const cells = columns
           .map((col) => {
             const fieldName = ventasImportFieldMap[col];
@@ -668,11 +698,12 @@ if (ventasPage) {
       })
       .join("");
 
-    const missingCount = state.previewRows.filter((row) => !parseDateInputValue(row.fecha_vencimiento)).length;
     previewBody.dataset.missingDueDates = String(missingCount);
-    previewBody.dataset.totalRows = String(state.previewRows.length);
+    previewBody.dataset.totalRows = String(totalRows);
     if (previewCount) {
-      previewCount.textContent = `${state.previewRows.length} filas${missingCount ? ` · ${missingCount} sin vencimiento` : ""}`;
+      previewCount.textContent = state.previewFilter === "missing"
+        ? `${visibleRows.length} visibles de ${totalRows} filas · ${missingCount} sin vencimiento`
+        : `${visibleRows.length} filas${missingCount ? ` · ${missingCount} sin vencimiento` : ""}`;
     }
 
     refreshKpis();
@@ -683,11 +714,7 @@ if (ventasPage) {
       return;
     }
 
-    const totalRows = Number(previewBody.dataset.totalRows || state.previewRows.length || 0);
-    const missingCount = state.previewRows.filter((row) => !parseDateInputValue(row.fecha_vencimiento)).length;
-    previewCount.textContent = `${totalRows} filas${missingCount ? ` · ${missingCount} sin vencimiento` : ""}`;
-    previewBody.dataset.missingDueDates = String(missingCount);
-    previewBody.dataset.totalRows = String(totalRows);
+    renderImportPreview();
   };
 
   const renderTable = (headEl, bodyEl, rows, columns, emptyText) => {
@@ -1107,12 +1134,14 @@ if (ventasPage) {
   const resetImportState = () => {
     state.previewRows = [];
     state.previewColumns = [];
+    state.previewFilter = "all";
     state.dueDatesMap = new Map();
     state.salesFileName = "";
     state.dueDatesFileName = "";
 
     if (fileInput) fileInput.value = "";
     if (dueFileInput) dueFileInput.value = "";
+    if (previewFilter) previewFilter.value = "all";
     if (fileNameLabel) fileNameLabel.textContent = "Sin archivo seleccionado.";
     if (dueFileNameLabel) dueFileNameLabel.textContent = "Sin planilla de vencimientos seleccionada.";
   };
@@ -1883,6 +1912,13 @@ if (ventasPage) {
       if (importStatus) {
         importStatus.textContent = "Preview limpio.";
       }
+    });
+  }
+
+  if (previewFilter) {
+    previewFilter.addEventListener("change", () => {
+      state.previewFilter = previewFilter.value === "missing" ? "missing" : "all";
+      renderPreview();
     });
   }
 

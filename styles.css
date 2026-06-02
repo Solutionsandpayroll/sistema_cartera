@@ -1414,6 +1414,10 @@ tbody tr:hover {
   font-weight: 700;
 }
 
+.preview-filters {
+  align-items: center;
+}
+
 .preview-wrap {
   max-height: 16rem;
 }
