@@ -202,20 +202,92 @@ if (ventasPage) {
   const normalizeDocumentKey = (value) =>
     normalizeKey(value).replace(/[^a-z0-9]/g, "");
 
+  const normalizeTwoDigitYear = (yearValue) => {
+    const year = Number.parseInt(String(yearValue || ""), 10);
+    if (!Number.isFinite(year)) {
+      return null;
+    }
+
+    if (String(yearValue).length >= 4) {
+      return year;
+    }
+
+    return year >= 70 ? 1900 + year : 2000 + year;
+  };
+
+  const toIsoDateString = (yearValue, monthValue, dayValue) => {
+    const year = Number.parseInt(String(yearValue || ""), 10);
+    const month = Number.parseInt(String(monthValue || ""), 10);
+    const day = Number.parseInt(String(dayValue || ""), 10);
+
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+      return "";
+    }
+
+    const candidate = new Date(Date.UTC(year, month - 1, day));
+    if (
+      Number.isNaN(candidate.getTime()) ||
+      candidate.getUTCFullYear() !== year ||
+      candidate.getUTCMonth() + 1 !== month ||
+      candidate.getUTCDate() !== day
+    ) {
+      return "";
+    }
+
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  };
+
+  const excelSerialToIsoDate = (serialValue) => {
+    const serial = Number(serialValue);
+    if (!Number.isFinite(serial) || serial <= 0) {
+      return "";
+    }
+
+    const epoch = Date.UTC(1899, 11, 30);
+    const ms = Math.round(serial * 86400000);
+    const parsed = new Date(epoch + ms);
+    if (Number.isNaN(parsed.getTime())) {
+      return "";
+    }
+
+    return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}-${String(parsed.getUTCDate()).padStart(2, "0")}`;
+  };
+
   const parseDateInputValue = (value) => {
-    const raw = String(value || "").trim();
+    if (value === null || typeof value === "undefined") {
+      return "";
+    }
+
+    if (typeof value === "number") {
+      const isoFromSerial = excelSerialToIsoDate(value);
+      if (isoFromSerial) {
+        return isoFromSerial;
+      }
+    }
+
+    const raw = String(value).trim();
     if (!raw) {
       return "";
     }
 
-    const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (isoMatch) {
-      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    if (/^\d{5}(?:\.\d+)?$/.test(raw)) {
+      const isoFromSerial = excelSerialToIsoDate(raw);
+      if (isoFromSerial) {
+        return isoFromSerial;
+      }
     }
 
-    const dmyMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    const dateOnly = raw.split(/[T\s]/)[0].trim();
+
+    const isoMatch = dateOnly.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+    if (isoMatch) {
+      return toIsoDateString(isoMatch[1], isoMatch[2], isoMatch[3]);
+    }
+
+    const dmyMatch = dateOnly.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/);
     if (dmyMatch) {
-      return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+      const normalizedYear = normalizeTwoDigitYear(dmyMatch[3]);
+      return normalizedYear ? toIsoDateString(normalizedYear, dmyMatch[2], dmyMatch[1]) : "";
     }
 
     const parsed = new Date(raw);
@@ -223,10 +295,7 @@ if (ventasPage) {
       return "";
     }
 
-    const year = parsed.getFullYear();
-    const month = String(parsed.getMonth() + 1).padStart(2, "0");
-    const day = String(parsed.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+    return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}-${String(parsed.getUTCDate()).padStart(2, "0")}`;
   };
 
   const inferColumns = (rows) => {
@@ -262,7 +331,9 @@ if (ventasPage) {
       "tipo",
       "transaccion",
       "comprobante",
+      "documento",
       "fecha",
+      "vencimiento",
       "identificacion",
       "sucursal",
       "cliente",
@@ -276,7 +347,7 @@ if (ventasPage) {
     ];
 
     const nonEmptyCells = cells.filter((cell) => normalizeHeader(cell)).length;
-    if (nonEmptyCells < 3) {
+    if (nonEmptyCells < 2) {
       return -1;
     }
 
@@ -361,8 +432,21 @@ if (ventasPage) {
   const buildDueDatesMap = (rows) => {
     const dueMap = new Map();
     rows.forEach((row) => {
-      const documentValue = getPossibleFieldValue(row, ["documento", "comprobante", "referencia"]);
-      const dueDateValue = getPossibleFieldValue(row, ["fecha vencimiento", "fecha_vencimiento", "vencimiento"]);
+      const documentValue = getPossibleFieldValue(row, [
+        "documento",
+        "numero documento",
+        "nro documento",
+        "comprobante",
+        "referencia",
+        "numero"
+      ]);
+      const dueDateValue = getPossibleFieldValue(row, [
+        "fecha vencimiento",
+        "fecha de vencimiento",
+        "fecha_vencimiento",
+        "f vencimiento",
+        "vencimiento"
+      ]);
       const key = normalizeDocumentKey(documentValue);
       const isoDate = parseDateInputValue(dueDateValue);
       if (key && isoDate) {

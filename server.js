@@ -495,23 +495,97 @@ const getEffectiveTransactionAmount = (transaction) => {
   return roundMoney(transaction?.valor ?? 0);
 };
 
-const parseDate = (value) => {
-  if (!value) return null;
-  const dateStr = String(value).trim();
-
-  const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) {
-    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+const normalizeTwoDigitYear = (yearValue) => {
+  const year = Number.parseInt(String(yearValue || ""), 10);
+  if (!Number.isFinite(year)) {
+    return null;
   }
 
-  const dmyMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (String(yearValue).length >= 4) {
+    return year;
+  }
+
+  return year >= 70 ? 1900 + year : 2000 + year;
+};
+
+const buildIsoDate = (yearValue, monthValue, dayValue) => {
+  const year = Number.parseInt(String(yearValue || ""), 10);
+  const month = Number.parseInt(String(monthValue || ""), 10);
+  const day = Number.parseInt(String(dayValue || ""), 10);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    Number.isNaN(candidate.getTime()) ||
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() + 1 !== month ||
+    candidate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+};
+
+const excelSerialToIsoDate = (serialValue) => {
+  const serial = Number(serialValue);
+  if (!Number.isFinite(serial) || serial <= 0) {
+    return null;
+  }
+
+  const epoch = Date.UTC(1899, 11, 30);
+  const ms = Math.round(serial * 86400000);
+  const parsed = new Date(epoch + ms);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}-${String(parsed.getUTCDate()).padStart(2, "0")}`;
+};
+
+const parseDate = (value) => {
+  if (value === null || typeof value === "undefined" || value === "") {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return excelSerialToIsoDate(value);
+  }
+
+  const dateStr = String(value).trim();
+  if (!dateStr) {
+    return null;
+  }
+
+  if (/^\d{5}(?:\.\d+)?$/.test(dateStr)) {
+    const isoFromSerial = excelSerialToIsoDate(dateStr);
+    if (isoFromSerial) {
+      return isoFromSerial;
+    }
+  }
+
+  const dateOnly = dateStr.split(/[T\s]/)[0].trim();
+
+  const isoMatch = dateOnly.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (isoMatch) {
+    return buildIsoDate(isoMatch[1], isoMatch[2], isoMatch[3]);
+  }
+
+  const dmyMatch = dateOnly.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/);
   if (dmyMatch) {
-    return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+    const normalizedYear = normalizeTwoDigitYear(dmyMatch[3]);
+    return normalizedYear ? buildIsoDate(normalizedYear, dmyMatch[2], dmyMatch[1]) : null;
   }
 
   const parsed = new Date(dateStr);
-  if (isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().split("T")[0]; // Retorna formato YYYY-MM-DD
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().split("T")[0];
 };
 
 const parseDateTime = (value) => {
