@@ -517,23 +517,32 @@ if (ventasPage) {
     let s = String(value || "").trim();
     if (!s) return 0;
 
-    // Remove currency symbols and spaces
+    // Remove currency symbols and spaces.
     s = s.replace(/\s+/g, "").replace(/\$/g, "").replace(/€|COP|USD/gi, "");
 
-    // If contains both dot and comma, assume dot thousands and comma decimal
-    if (s.indexOf('.') > -1 && s.indexOf(',') > -1) {
-      s = s.replace(/\./g, '').replace(/,/g, '.');
-    } else if (s.indexOf(',') > -1 && s.indexOf('.') === -1) {
-      // only comma -> decimal separator
-      s = s.replace(/,/g, '.');
-    } else {
-      // only dot present or none
-      const parts = s.split('.');
-      if (parts.length > 2) {
-        // multiple dots -> likely thousand separators: remove all
-        s = parts.join('');
+    const lastDot = s.lastIndexOf(".");
+    const lastComma = s.lastIndexOf(",");
+
+    if (lastDot > -1 && lastComma > -1) {
+      if (lastComma > lastDot) {
+        s = s.replace(/\./g, "").replace(/,/g, ".");
+      } else {
+        s = s.replace(/,/g, "");
       }
-      // else single dot -> decimal separator, keep it
+    } else if (lastComma > -1) {
+      s = s.replace(/\./g, "").replace(/,/g, ".");
+    } else if (lastDot > -1) {
+      const dotParts = s.split(".");
+      const hasThousandGrouping = dotParts.length > 1 && dotParts.every((part, index) => {
+        if (index === 0) {
+          return /^\d+$/.test(part);
+        }
+        return /^\d{3}$/.test(part);
+      });
+
+      if (hasThousandGrouping) {
+        s = dotParts.join("");
+      }
     }
 
     const amount = Number.parseFloat(s);
@@ -2132,11 +2141,35 @@ if (transaccionesPage) {
       return Number.isFinite(value) ? value : 0;
     }
 
-    const clean = String(value || "")
-      .replace(/\s+/g, "")
-      .replace(/\$/g, "")
-      .replace(/\./g, "")
-      .replace(/,/g, ".");
+    let clean = String(value || "").trim();
+    if (!clean) return 0;
+
+    clean = clean.replace(/\s+/g, "").replace(/\$/g, "").replace(/€|COP|USD/gi, "");
+
+    const lastDot = clean.lastIndexOf(".");
+    const lastComma = clean.lastIndexOf(",");
+
+    if (lastDot > -1 && lastComma > -1) {
+      if (lastComma > lastDot) {
+        clean = clean.replace(/\./g, "").replace(/,/g, ".");
+      } else {
+        clean = clean.replace(/,/g, "");
+      }
+    } else if (lastComma > -1) {
+      clean = clean.replace(/\./g, "").replace(/,/g, ".");
+    } else if (lastDot > -1) {
+      const dotParts = clean.split(".");
+      const hasThousandGrouping = dotParts.length > 1 && dotParts.every((part, index) => {
+        if (index === 0) {
+          return /^\d+$/.test(part);
+        }
+        return /^\d{3}$/.test(part);
+      });
+
+      if (hasThousandGrouping) {
+        clean = dotParts.join("");
+      }
+    }
 
     const amount = Number.parseFloat(clean);
     return Number.isFinite(amount) ? amount : 0;
@@ -3782,14 +3815,28 @@ if (homePage) {
 
     text = text.replace(/\s+/g, "").replace(/\$/g, "").replace(/€|COP|USD/gi, "");
 
-    if (text.includes(".") && text.includes(",")) {
+    const lastDot = text.lastIndexOf(".");
+    const lastComma = text.lastIndexOf(",");
+
+    if (lastDot > -1 && lastComma > -1) {
+      if (lastComma > lastDot) {
+        text = text.replace(/\./g, "").replace(/,/g, ".");
+      } else {
+        text = text.replace(/,/g, "");
+      }
+    } else if (lastComma > -1) {
       text = text.replace(/\./g, "").replace(/,/g, ".");
-    } else if (text.includes(",") && !text.includes(".")) {
-      text = text.replace(/,/g, ".");
-    } else {
-      const parts = text.split(".");
-      if (parts.length > 2) {
-        text = parts.join("");
+    } else if (lastDot > -1) {
+      const dotParts = text.split(".");
+      const hasThousandGrouping = dotParts.length > 1 && dotParts.every((part, index) => {
+        if (index === 0) {
+          return /^\d+$/.test(part);
+        }
+        return /^\d{3}$/.test(part);
+      });
+
+      if (hasThousandGrouping) {
+        text = dotParts.join("");
       }
     }
 

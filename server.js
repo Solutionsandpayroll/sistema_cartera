@@ -423,11 +423,38 @@ const parseCurrency = (value) => {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
   }
-  const clean = String(value || "")
-    .replace(/\s+/g, "")
-    .replace(/\$/g, "")
-    .replace(/\./g, "")
-    .replace(/,/g, ".");
+  let clean = String(value || "").trim();
+  if (!clean) {
+    return 0;
+  }
+
+  clean = clean.replace(/\s+/g, "").replace(/\$/g, "").replace(/€|COP|USD/gi, "");
+
+  const lastDot = clean.lastIndexOf(".");
+  const lastComma = clean.lastIndexOf(",");
+
+  if (lastDot > -1 && lastComma > -1) {
+    if (lastComma > lastDot) {
+      clean = clean.replace(/\./g, "").replace(/,/g, ".");
+    } else {
+      clean = clean.replace(/,/g, "");
+    }
+  } else if (lastComma > -1) {
+    clean = clean.replace(/\./g, "").replace(/,/g, ".");
+  } else if (lastDot > -1) {
+    const dotParts = clean.split(".");
+    const hasThousandGrouping = dotParts.length > 1 && dotParts.every((part, index) => {
+      if (index === 0) {
+        return /^\d+$/.test(part);
+      }
+      return /^\d{3}$/.test(part);
+    });
+
+    if (hasThousandGrouping) {
+      clean = dotParts.join("");
+    }
+  }
+
   const amount = Number.parseFloat(clean);
   return Number.isFinite(amount) ? amount : 0;
 };
