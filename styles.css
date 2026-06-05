@@ -2779,3 +2779,10 @@ tbody tr:hover {
   color: #dc2626;
 }
 
+/* ── Modo solo lectura (rol readonly) ───────────────────────────────────────── */
+html.is-readonly #open-modal,
+html.is-readonly #open-nc-modal,
+html.is-readonly #ventas-apply-import,
+html.is-readonly #ventas-clear-preview {
+  display: none !important;
+}
