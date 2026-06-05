@@ -125,6 +125,8 @@ if (toast && showToastButton) {
   });
 }
 
+const isReadonly = () => window.scGuard?.role === "readonly";
+
 // ── Utilidades compartidas entre páginas ─────────────────────────────────────
 
 const normalizeKey = (value) =>
@@ -907,7 +909,7 @@ if (ventasPage) {
       return;
     }
 
-    const columns = [...ventasTableColumns, ventasActionColumn];
+    const columns = isReadonly() ? ventasTableColumns : [...ventasTableColumns, ventasActionColumn];
     tableHead.innerHTML = `<tr>${columns.map((col) => `<th>${escapeHtml(col)}</th>`).join("")}</tr>`;
 
     if (!rows.length) {
@@ -977,7 +979,7 @@ if (ventasPage) {
           })
           .join("");
 
-        const actionCell = `
+        const actionCell = isReadonly() ? "" : `
           <td class="row-actions-cell">
             <div class="row-actions" aria-label="Acciones">
               <button type="button" class="icon-btn" data-action="edit" title="Editar" aria-label="Editar">
@@ -2154,6 +2156,13 @@ if (ventasPage) {
   loadVentasFromDatabase();
   renderPreview();
 
+  // Ocultar controles de escritura para usuarios de solo lectura
+  if (isReadonly()) {
+    [openModalButton, applyImportButton, clearPreviewButton].forEach((el) => {
+      if (el) el.style.display = "none";
+    });
+  }
+
   // Delegated handlers for Ventas table
   tableBody?.addEventListener("click", (event) => {
     const button = event.target?.closest?.("button[data-action]");
@@ -2842,11 +2851,17 @@ if (transaccionesPage) {
     }
   };
 
-  const txGetVentaOptionsHtml = () => {
+  const txGetVentaOptionsHtml = (idCliente) => {
+    const filtered = idCliente
+      ? txState.ventasOptions.filter((v) => Number(v.id_cliente) === Number(idCliente))
+      : txState.ventasOptions;
+
     const options = [
-      '<option value="sin-venta">Venta no registrada</option>',
-      ...txState.ventasOptions.map((venta) => {
-        const label = `Venta #${venta.id_venta} | ${venta.cliente_nombre} | ${String(venta.moneda || "COP").toUpperCase()} | Saldo ${txFormatAmountWithCurrency(venta.saldo_venta || 0, venta.moneda || "COP")}`;
+      `<option value="sin-venta">Venta no registrada</option>`,
+      ...filtered.map((venta) => {
+        const comprobante = venta.comprobante || `#${venta.id_venta}`;
+        const saldo = txFormatAmountWithCurrency(venta.saldo_venta || 0, venta.moneda || "COP");
+        const label = `${comprobante} | #${venta.id_venta} | ${String(venta.moneda || "COP").toUpperCase()} | Saldo: ${saldo}`;
         return `<option value="venta:${venta.id_venta}">${txEscapeHtml(label)}</option>`;
       })
     ];
@@ -2913,57 +2928,33 @@ if (transaccionesPage) {
   };
 
   const txUpdateClientMode = (rowEl) => {
-    const ventaSelect = rowEl.querySelector('[data-field="venta"]');
     const clientSelect = rowEl.querySelector('[data-field="cliente-select"]');
-    const clientDisplay = rowEl.querySelector('[data-field="cliente-display"]');
     const clientIdInput = rowEl.querySelector('[data-field="cliente-id"]');
     const clienteNitInput = rowEl.querySelector('[data-field="nit"]');
+    const ventaSelect = rowEl.querySelector('[data-field="venta"]');
 
-    if (!ventaSelect || !clientSelect || !clientDisplay || !clientIdInput || !clienteNitInput) {
+    if (!clientSelect || !clientIdInput || !clienteNitInput || !ventaSelect) {
       return;
     }
 
-    const selected = String(ventaSelect.value || "");
-    const hasVenta = selected.startsWith("venta:");
     const selectedClientValue = String(clientSelect.value || "");
-    const isClientNoRegistered = selectedClientValue === "cliente:no-registrado";
+    const isNoRegistrado = selectedClientValue === "cliente:no-registrado";
+    const hasClient = selectedClientValue.startsWith("cliente:") && !isNoRegistrado;
+    const idCliente = hasClient ? Number.parseInt(selectedClientValue.split(":")[1], 10) : null;
+    const cliente = hasClient ? txState.clientesOptions.find((c) => Number(c.id_cliente) === idCliente) : null;
 
-    if (hasVenta) {
-      const idVenta = Number.parseInt(selected.split(":")[1], 10);
-      const venta = txState.ventasOptions.find((item) => Number(item.id_venta) === idVenta);
+    clientIdInput.value = idCliente ? String(idCliente) : "";
+    clienteNitInput.value = cliente?.identificacion || "";
+    clienteNitInput.readOnly = Boolean(cliente);
 
-      clientIdInput.value = String(venta?.id_cliente || "");
-      clientDisplay.value = venta?.cliente_nombre || "";
-      clienteNitInput.value = venta?.cliente_nit || "";
-      clientDisplay.readOnly = true;
-      clienteNitInput.readOnly = true;
-      clientSelect.hidden = true;
-      clientDisplay.hidden = false;
-      clientDisplay.classList.add("tx-input-readonly");
-      clienteNitInput.classList.add("tx-input-readonly");
-      txUpdateConversionMode(rowEl);
-      return;
+    // Rebuild venta options filtered by selected client
+    const prevVentaValue = ventaSelect.value;
+    ventaSelect.innerHTML = txGetVentaOptionsHtml(idCliente);
+    // Restore previous selection if it still belongs to this client
+    if (prevVentaValue && ventaSelect.querySelector(`option[value="${CSS.escape(prevVentaValue)}"]`)) {
+      ventaSelect.value = prevVentaValue;
     }
 
-    clientSelect.hidden = false;
-    clientDisplay.hidden = true;
-    clientDisplay.value = "";
-    if (isClientNoRegistered) {
-      clientIdInput.value = "";
-      clienteNitInput.value = "";
-      clientDisplay.value = "Cliente no registrado";
-      clientDisplay.readOnly = true;
-      clienteNitInput.readOnly = true;
-      clientDisplay.classList.add("tx-input-readonly");
-      clienteNitInput.classList.add("tx-input-readonly");
-    } else {
-      clienteNitInput.value = "";
-      clientDisplay.readOnly = false;
-      clienteNitInput.readOnly = false;
-      clientDisplay.classList.remove("tx-input-readonly");
-      clienteNitInput.classList.remove("tx-input-readonly");
-      clientIdInput.value = clientSelect.value ? String(clientSelect.value.split(":")[1] || "") : "";
-    }
     txUpdateConversionMode(rowEl);
   };
 
@@ -2979,19 +2970,18 @@ if (transaccionesPage) {
     row.innerHTML = `
       <td><input data-field="fecha" type="datetime-local" value="${txEscapeHtml(defaults.fecha || defaultDate)}" /></td>
       <td>
-        <select data-field="venta">
-          ${txGetVentaOptionsHtml()}
-        </select>
-      </td>
-      <td>
-        <input data-field="nit" type="text" placeholder="NIT" value="${txEscapeHtml(defaults.cliente_nit || "")}" />
-      </td>
-      <td>
         <select data-field="cliente-select">
           ${txGetClientOptionsHtml()}
         </select>
         <input data-field="cliente-id" type="hidden" value="${txEscapeHtml(defaults.id_cliente || "")}" />
-        <input data-field="cliente-display" type="text" placeholder="Nombre cliente" value="${txEscapeHtml(defaults.cliente_nombre || "")}" />
+      </td>
+      <td>
+        <input data-field="nit" type="text" placeholder="NIT" value="${txEscapeHtml(defaults.cliente_nit || "")}" readonly />
+      </td>
+      <td>
+        <select data-field="venta">
+          ${txGetVentaOptionsHtml(defaults.id_cliente ? Number(defaults.id_cliente) : null)}
+        </select>
       </td>
       <td><input data-field="valor" type="text" placeholder="0" value="${txEscapeHtml(defaults.valor || "")}" /></td>
       <td>
@@ -3027,18 +3017,23 @@ if (transaccionesPage) {
 
     txPlanBody.appendChild(row);
 
-    const ventaSelect = row.querySelector('[data-field="venta"]');
     const clientSelect = row.querySelector('[data-field="cliente-select"]');
+    const ventaSelect = row.querySelector('[data-field="venta"]');
+
+    if (clientSelect && defaults.id_cliente) {
+      clientSelect.value = `cliente:${defaults.id_cliente}`;
+      txUpdateClientMode(row);
+    }
     if (ventaSelect && defaults.id_venta) {
       ventaSelect.value = `venta:${defaults.id_venta}`;
     }
-    if (clientSelect && defaults.id_cliente) {
-      clientSelect.value = `cliente:${defaults.id_cliente}`;
-    }
-    txUpdateClientMode(row);
+
+    row.querySelector('[data-field="cliente-select"]')?.addEventListener("change", () => {
+      txUpdateClientMode(row);
+      txUpdatePlanPreview();
+    });
 
     row.querySelector('[data-field="venta"]')?.addEventListener("change", () => {
-      txUpdateClientMode(row);
       txUpdateConversionMode(row);
     });
 
@@ -3052,40 +3047,6 @@ if (transaccionesPage) {
 
     row.querySelector('[data-field="tasa-conversion"]')?.addEventListener("input", () => {
       txUpdateConversionPreview(row);
-    });
-
-    row.querySelector('[data-field="cliente-select"]')?.addEventListener("change", (event) => {
-      const target = event.currentTarget;
-      const clientIdInput = row.querySelector('[data-field="cliente-id"]');
-      const clienteNitInput = row.querySelector('[data-field="nit"]');
-      const clientDisplay = row.querySelector('[data-field="cliente-display"]');
-      const selectedCliente = txState.clientesOptions.find((cliente) => `cliente:${cliente.id_cliente}` === String(target?.value || ""));
-
-      if (target?.value === "cliente:no-registrado") {
-        if (clientIdInput) {
-          clientIdInput.value = "";
-        }
-        if (clienteNitInput) {
-          clienteNitInput.value = "";
-          clienteNitInput.readOnly = true;
-        }
-        if (clientDisplay) {
-          clientDisplay.value = "Cliente no registrado";
-          clientDisplay.readOnly = true;
-        }
-        txUpdatePlanPreview();
-        return;
-      }
-
-      if (clientIdInput) {
-        clientIdInput.value = selectedCliente ? String(selectedCliente.id_cliente) : "";
-      }
-      if (clienteNitInput) {
-        clienteNitInput.value = selectedCliente?.identificacion || "";
-      }
-      if (clientDisplay) {
-        clientDisplay.value = selectedCliente?.nombre || "";
-      }
     });
 
     row.querySelector('[data-field="banco"]')?.addEventListener("change", (event) => {
@@ -3143,8 +3104,9 @@ if (transaccionesPage) {
       const fecha = rowEl.querySelector('[data-field="fecha"]')?.value || "";
       const clienteId = rowEl.querySelector('[data-field="cliente-id"]')?.value || "";
       const clienteNit = rowEl.querySelector('[data-field="nit"]')?.value || "";
-      const clienteNombre = rowEl.querySelector('[data-field="cliente-display"]')?.value || "";
       const clienteSelectValue = rowEl.querySelector('[data-field="cliente-select"]')?.value || "";
+      const selectedClienteObj = txState.clientesOptions.find((c) => `cliente:${c.id_cliente}` === clienteSelectValue);
+      const clienteNombre = selectedClienteObj?.nombre || "";
       const valorRaw = rowEl.querySelector('[data-field="valor"]')?.value || "";
       const moneda = rowEl.querySelector('[data-field="moneda"]')?.value || "COP";
       const tasaConversionRaw = rowEl.querySelector('[data-field="tasa-conversion"]')?.value || "";
@@ -3240,7 +3202,6 @@ if (transaccionesPage) {
       const clienteId = rowEl.querySelector('[data-field="cliente-id"]')?.value || "";
       const clienteSelectValue = rowEl.querySelector('[data-field="cliente-select"]')?.value || "";
       const clienteNit = rowEl.querySelector('[data-field="nit"]')?.value || "";
-      const clienteNombre = rowEl.querySelector('[data-field="cliente-display"]')?.value || "";
       const valorRaw = rowEl.querySelector('[data-field="valor"]')?.value || "";
       const moneda = rowEl.querySelector('[data-field="moneda"]')?.value || "COP";
       const tasaConversionRaw = rowEl.querySelector('[data-field="tasa-conversion"]')?.value || "";
@@ -3336,7 +3297,7 @@ if (transaccionesPage) {
       return;
     }
 
-    const columns = [...txTableColumns, txActionColumn];
+    const columns = isReadonly() ? txTableColumns : [...txTableColumns, txActionColumn];
     txTableHead.innerHTML = `<tr>${columns.map((col) => `<th>${txEscapeHtml(col)}</th>`).join("")}</tr>`;
 
     if (!rows.length) {
@@ -3383,7 +3344,7 @@ if (transaccionesPage) {
           saldoCell
         ].join("");
 
-        const actionCell = `
+        const actionCell = isReadonly() ? "" : `
           <td class="row-actions-cell">
             <div class="row-actions" aria-label="Acciones">
               <button type="button" class="icon-btn" data-action="edit" title="Editar" aria-label="Editar">
@@ -3857,6 +3818,15 @@ if (transaccionesPage) {
       }
     }
   });
+
+  // Ocultar controles de escritura para usuarios de solo lectura
+  if (isReadonly()) {
+    const writeOnlyIds = ["open-modal", "open-nc-modal"];
+    writeOnlyIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    });
+  }
 
   (async () => {
     try {

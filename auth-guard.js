@@ -195,6 +195,14 @@
     });
   };
 
+  const applyRole = (data) => {
+    const role = data?.role || "admin";
+    window.scGuard.role = role;
+    if (role === "readonly") {
+      document.documentElement.classList.add("is-readonly");
+    }
+  };
+
   const guard = async () => {
     const data = await me();
 
@@ -209,6 +217,7 @@
 
     attachLogout();
     setSessionUser(data);
+    applyRole(data);
 
     if (!data) {
       goLogin();
@@ -225,6 +234,7 @@
   // Exponer helper para que otras scripts redirijan en 401
   window.scGuard = {
     goLogin,
-    setSessionUser
+    setSessionUser,
+    role: "admin"
   };
 })();

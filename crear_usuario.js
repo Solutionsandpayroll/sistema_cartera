@@ -3,13 +3,24 @@ const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
 
-const [usernameArg, passwordArg, ...displayNameParts] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const roleIndex = args.findIndex((a) => a === "--role");
+let role = "admin";
+if (roleIndex !== -1 && args[roleIndex + 1]) {
+  role = String(args.splice(roleIndex, 2)[1]).trim().toLowerCase();
+}
+if (!["admin", "readonly"].includes(role)) {
+  console.error("Rol inválido. Usa --role admin o --role readonly");
+  process.exit(1);
+}
+
+const [usernameArg, passwordArg, ...displayNameParts] = args;
 const username = String(usernameArg || "").trim();
 const password = String(passwordArg || "");
 const displayName = String(displayNameParts.join(" ") || username).trim();
 
 if (!username || !password) {
-  console.error("Uso: node crear_usuario.js <username> <password> [display name]");
+  console.error("Uso: node crear_usuario.js <username> <password> [display name] [--role admin|readonly]");
   process.exit(1);
 }
 
@@ -59,17 +70,19 @@ const main = async () => {
        password_hash,
        password_salt,
        password_algorithm,
-       is_active
-     ) VALUES ($1, $2, $3, $4, 'scrypt', TRUE)
+       is_active,
+       role
+     ) VALUES ($1, $2, $3, $4, 'scrypt', TRUE, $5)
      ON CONFLICT (username) DO UPDATE SET
        display_name = EXCLUDED.display_name,
        password_hash = EXCLUDED.password_hash,
        password_salt = EXCLUDED.password_salt,
        password_algorithm = EXCLUDED.password_algorithm,
        is_active = TRUE,
+       role = EXCLUDED.role,
        updated_at = NOW()
-     RETURNING id_user, username, display_name`,
-    [username, displayName, passwordHash, salt]
+     RETURNING id_user, username, display_name, role`,
+    [username, displayName, passwordHash, salt, role]
   );
 
   console.log("Usuario listo:", result.rows[0]);

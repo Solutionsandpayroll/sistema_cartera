@@ -172,7 +172,7 @@ app.post("/api/auth/login", async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id_user, username, display_name, password_hash, password_salt, password_algorithm, is_active
+      `SELECT id_user, username, display_name, password_hash, password_salt, password_algorithm, is_active, role
        FROM users
        WHERE username = $1
        LIMIT 1`,
@@ -215,9 +215,11 @@ app.post("/api/auth/login", async (req, res) => {
     .catch(() => null);
 
   const token = crypto.randomBytes(24).toString("hex");
+  const userRole = String(user.role || "admin");
   sessions.set(token, {
     user: user.display_name || user.username,
     username: user.username,
+    role: userRole,
     expiresAt: Date.now() + SESSION_TTL_MS
   });
 
@@ -226,7 +228,8 @@ app.post("/api/auth/login", async (req, res) => {
     success: true,
     data: {
       user: user.display_name || user.username,
-      username: user.username
+      username: user.username,
+      role: userRole
     }
   });
 });
@@ -253,7 +256,8 @@ app.get("/api/auth/me", (req, res) => {
     success: true,
     data: {
       user: session.user,
-      username: session.username || session.user
+      username: session.username || session.user,
+      role: session.role || "admin"
     }
   });
 });
@@ -269,6 +273,16 @@ app.use("/api", (req, res, next) => {
   }
 
   req.user = session.user;
+  req.role = session.role || "admin";
+  next();
+});
+
+// Bloquear escritura para usuarios de solo lectura
+app.use("/api", (req, res, next) => {
+  if (req.path.startsWith("/auth") || req.path === "/health") return next();
+  if (req.role === "readonly" && ["POST", "PUT", "DELETE", "PATCH"].includes(req.method)) {
+    return res.status(403).json({ success: false, message: "Acceso de solo lectura: esta acción no está permitida." });
+  }
   next();
 });
 
@@ -1604,6 +1618,7 @@ app.post("/api/transacciones/bulk", async (req, res) => {
         let tipoCambio = null;
         let monedaReferencia = null;
         let valorEquivalente = null;
+        let ventaMoneda = moneda;
 
         if (hasVenta) {
           const ventaResult = await client.query(
@@ -1620,7 +1635,7 @@ app.post("/api/transacciones/bulk", async (req, res) => {
 
           const venta = ventaResult.rows[0];
           idCliente = venta.id_cliente;
-          const ventaMoneda = normalizeValue(venta.moneda) || moneda;
+          ventaMoneda = normalizeValue(venta.moneda) || moneda;
 
           const totalAplicadoResult = await client.query(
             `SELECT COALESCE(SUM(a.valor_aplicado), 0)::NUMERIC(15,2) AS total_aplicado
@@ -1752,7 +1767,6 @@ app.post("/api/transacciones/bulk", async (req, res) => {
         const idTransaccion = transaccionResult.rows[0].id_transaccion;
 
         if (hasVenta) {
-          const ventaMoneda = normalizeValue(ventaResult.rows[0]?.moneda) || moneda;
           const requiresConversion = ventaMoneda !== moneda;
           const exchangeRate = requiresConversion ? parseExchangeRate(tasaConversionRaw) : 1;
           if (requiresConversion && !exchangeRate) {
@@ -3773,6 +3787,24 @@ app.post("/api/notas-credito/import", async (req, res) => {
     client.release();
   }
 });
+
+// Agregar columna role si no existe (migración idempotente)
+pool.query(`
+  ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin';
+`).then(() =>
+  pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'users_role_check'
+      ) THEN
+        ALTER TABLE users
+          ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'readonly'));
+      END IF;
+    END $$;
+  `)
+).catch((err) => console.warn("Migración role:", err.message));
 
 // Iniciar servidor
 app.listen(PORT, () => {
