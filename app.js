@@ -125,6 +125,149 @@ if (toast && showToastButton) {
   });
 }
 
+// ── Utilidades compartidas entre páginas ─────────────────────────────────────
+
+const normalizeKey = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim();
+
+const normalizeHeader = (value) =>
+  String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const escapeHtml = (value) =>
+  String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+const getPossibleFieldValue = (row, alternatives) => {
+  const entries = Object.entries(row);
+  for (const [key, value] of entries) {
+    const normalized = normalizeKey(key);
+    if (alternatives.some((alt) => normalized.includes(alt))) {
+      return String(value || "");
+    }
+  }
+  return "";
+};
+
+const parseCurrency = (value) => {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return 0;
+    return Math.round(value * 100) / 100;
+  }
+  let s = String(value || "").trim();
+  if (!s) return 0;
+  s = s.replace(/\s+/g, "").replace(/\$/g, "").replace(/€|COP|USD/gi, "");
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+  if (lastDot > -1 && lastComma > -1) {
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, "").replace(/,/g, ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (lastComma > -1) {
+    const commaParts = s.split(",");
+    const hasThousandGroupingByComma = commaParts.length > 1 && commaParts.every((part, index) => {
+      if (index === 0) return /^\d+$/.test(part);
+      return /^\d{3}$/.test(part);
+    });
+    if (hasThousandGroupingByComma) {
+      s = commaParts.join("");
+    } else {
+      s = s.replace(/\./g, "").replace(/,/g, ".");
+    }
+  } else if (lastDot > -1) {
+    const dotParts = s.split(".");
+    const hasThousandGrouping = dotParts.length > 1 && dotParts.every((part, index) => {
+      if (index === 0) return /^\d+$/.test(part);
+      return /^\d{3}$/.test(part);
+    });
+    if (hasThousandGrouping) {
+      s = dotParts.join("");
+    }
+  }
+  const amount = Number.parseFloat(s);
+  return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
+};
+
+const formatDisplayDate = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${String(parsed.getDate()).padStart(2, "0")}/${String(parsed.getMonth() + 1).padStart(2, "0")}/${parsed.getFullYear()}`;
+  }
+  return raw;
+};
+
+const inferColumns = (rows) => {
+  const colSet = new Set();
+  rows.forEach((row) => Object.keys(row).forEach((key) => { if (String(key).trim()) colSet.add(String(key).trim()); }));
+  return Array.from(colSet);
+};
+
+const ensureUniqueHeaders = (headers) => {
+  const seen = new Map();
+  return headers.map((header, index) => {
+    const base = normalizeHeader(header) || `Columna ${index + 1}`;
+    const count = seen.get(base) || 0;
+    seen.set(base, count + 1);
+    return count ? `${base} (${count + 1})` : base;
+  });
+};
+
+const scoreHeaderRow = (cells) => {
+  const knownHeaderHints = ["tipo","transaccion","comprobante","documento","fecha","vencimiento","identificacion","sucursal","cliente","estado","correo","total","moneda","nit","empleado","vendedor"];
+  const nonEmptyCells = cells.filter((cell) => normalizeHeader(cell)).length;
+  if (nonEmptyCells < 2) return -1;
+  const hintMatches = cells.reduce((acc, cell) => {
+    const normalized = normalizeKey(cell);
+    if (!normalized) return acc;
+    return acc + (knownHeaderHints.some((hint) => normalized.includes(hint)) ? 1 : 0);
+  }, 0);
+  return nonEmptyCells * 2 + hintMatches * 5;
+};
+
+const parseVentasSheet = (worksheet) => {
+  const matrix = window.XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", blankrows: false, raw: false });
+  if (!matrix.length) return { rows: [], columns: [] };
+  let headerIndex = -1;
+  let headerScore = -1;
+  matrix.forEach((row, index) => {
+    const score = scoreHeaderRow(row);
+    if (score > headerScore) { headerScore = score; headerIndex = index; }
+  });
+  if (headerIndex < 0) {
+    const fallbackRows = window.XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+    return { rows: fallbackRows, columns: inferColumns(fallbackRows) };
+  }
+  const rawHeaders = matrix[headerIndex] || [];
+  const lastHeaderCell = rawHeaders.reduce((last, header, index) => normalizeHeader(header) ? index : last, -1);
+  const headers = ensureUniqueHeaders(rawHeaders.slice(0, lastHeaderCell + 1));
+  const rows = matrix
+    .slice(headerIndex + 1)
+    .map((row) => {
+      const record = {};
+      headers.forEach((header, colIndex) => { record[header] = String(row[colIndex] ?? "").trim(); });
+      return record;
+    })
+    .filter((record) => Object.values(record).some((value) => normalizeHeader(value)));
+  return { rows, columns: headers };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const ventasPage = document.getElementById("ventas-page");
 
 if (ventasPage) {
@@ -189,10 +332,6 @@ if (ventasPage) {
   const ventasReadOnlyColumns = new Set(["ID Venta", "Aplicado", "Saldo"]);
 
   const kpiTotal = document.getElementById("ventas-kpi-total");
-  const kpiEmployees = document.getElementById("ventas-kpi-empleados");
-  const kpiAmount = document.getElementById("ventas-kpi-monto");
-  const kpiFile = document.getElementById("ventas-kpi-archivo");
-  const kpiRecords = document.getElementById("ventas-kpi-registros");
 
   const normalizeKey = (value) =>
     String(value || "")
@@ -438,11 +577,15 @@ if (ventasPage) {
         sucursal: getPossibleFieldValue(row, ["sucursal", "sucursal id"]),
         cliente: getPossibleFieldValue(row, ["cliente", "nombre", "empresa"]),
         estado_envio_correo: getPossibleFieldValue(row, ["estado envio de correo", "estado_envio_correo", "estado correo"]),
-        total: getPossibleFieldValue(row, ["total", "monto", "valor", "venta", "importe"]),
+        total: String(parseCurrency(getPossibleFieldValue(row, ["total", "monto", "valor", "venta", "importe"]))),
         moneda: getPossibleFieldValue(row, ["moneda"]),
         fecha_vencimiento: ""
       }))
-      .filter((record) => Object.values(record).some((value) => normalizeHeader(value)));
+      .filter((record) => {
+        if (!Object.values(record).some((value) => normalizeHeader(value))) return false;
+        const comp = String(record.comprobante || "").trim().toUpperCase();
+        return !comp.startsWith("NC");
+      });
 
   const buildDueDatesMap = (rows) => {
     const dueMap = new Map();
@@ -511,13 +654,13 @@ if (ventasPage) {
 
   const parseCurrency = (value) => {
     if (typeof value === "number") {
-      return Number.isFinite(value) ? value : 0;
+      if (!Number.isFinite(value)) return 0;
+      return Math.round(value * 100) / 100;  // ← limpia el floating point desde el origen
     }
 
     let s = String(value || "").trim();
     if (!s) return 0;
 
-    // Remove currency symbols and spaces.
     s = s.replace(/\s+/g, "").replace(/\$/g, "").replace(/€|COP|USD/gi, "");
 
     const lastDot = s.lastIndexOf(".");
@@ -530,7 +673,16 @@ if (ventasPage) {
         s = s.replace(/,/g, "");
       }
     } else if (lastComma > -1) {
-      s = s.replace(/\./g, "").replace(/,/g, ".");
+      const commaParts = s.split(",");
+      const hasThousandGroupingByComma = commaParts.length > 1 && commaParts.every((part, index) => {
+        if (index === 0) return /^\d+$/.test(part);
+        return /^\d{3}$/.test(part);
+      });
+      if (hasThousandGroupingByComma) {
+        s = commaParts.join("");
+      } else {
+        s = s.replace(/\./g, "").replace(/,/g, ".");
+      }
     } else if (lastDot > -1) {
       const dotParts = s.split(".");
       const hasThousandGrouping = dotParts.length > 1 && dotParts.every((part, index) => {
@@ -546,7 +698,7 @@ if (ventasPage) {
     }
 
     const amount = Number.parseFloat(s);
-    return Number.isFinite(amount) ? amount : 0;
+    return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;  // ← también aquí
   };
 
   const ventasTableColumns = [
@@ -787,7 +939,25 @@ if (ventasPage) {
 
             if (moneyCols.has(col)) {
               const amount = parseCurrency(raw);
-              const formatted = escapeHtml(moneyFormatter.format(amount));
+              const rowCurrency = String(row['Moneda'] || "COP").trim().toUpperCase() || "COP";
+              let formatted;
+              if (col === "Total") {
+                formatted = escapeHtml(
+                  new Intl.NumberFormat("es-CO", {
+                    style: "decimal",
+                    minimumFractionDigits: rowCurrency === "COP" ? 0 : 2,
+                    maximumFractionDigits: rowCurrency === "COP" ? 0 : 2
+                  }).format(amount)
+                );
+              } else {
+                formatted = escapeHtml(
+                  new Intl.NumberFormat("es-CO", {
+                    style: "currency",
+                    currency: "COP",
+                    maximumFractionDigits: 0
+                  }).format(amount)
+                );
+              }
               const klass =
                 col === "Aplicado"
                   ? "text-green-600 font-bold text-right"
@@ -1015,30 +1185,47 @@ if (ventasPage) {
       kpiTotal.textContent = String(state.records.length);
     }
 
-    const uniqueEmployees = new Set(
-      state.records
-        .map((row) => getPossibleFieldValue(row, ["empleado", "vendedor", "asesor", "ejecutivo", "nombre"]))
-        .map((v) => v.trim())
-        .filter(Boolean)
-    );
+    const amountsByCurrency = state.records.reduce((acc, row) => {
+      const raw = row['Total'] ?? row.Total ?? "";
+      const moneda = String(row['Moneda'] || row.moneda || "COP").trim().toUpperCase() || "COP";
+      acc[moneda] = (acc[moneda] || 0) + parseCurrency(raw);
+      return acc;
+    }, {});
 
-    if (kpiEmployees) {
-      kpiEmployees.textContent = String(uniqueEmployees.size);
+    const amountsContainer = document.getElementById("ventas-kpi-amounts");
+    if (amountsContainer) {
+      const currencies = Object.keys(amountsByCurrency).sort();
+      if (!currencies.length) {
+        amountsContainer.innerHTML = `
+          <article class="kpi-card">
+            <div class="kpi-icon bg-emerald-100 text-emerald-700">
+              <span class="material-symbols-outlined">task_alt</span>
+            </div>
+            <p class="kpi-label">Monto total</p>
+            <p class="kpi-value">$ 0</p>
+            <p class="kpi-meta">Sin ventas cargadas</p>
+          </article>`;
+      } else {
+        amountsContainer.innerHTML = currencies.map((currency) => {
+          const total = amountsByCurrency[currency];
+          const formatted = new Intl.NumberFormat("es-CO", {
+            style: "decimal",
+            minimumFractionDigits: currency === "COP" ? 0 : 2,
+            maximumFractionDigits: currency === "COP" ? 0 : 2
+          }).format(total);
+          return `
+            <article class="kpi-card">
+              <div class="kpi-icon bg-emerald-100 text-emerald-700">
+                <span class="material-symbols-outlined">task_alt</span>
+              </div>
+              <p class="kpi-label">Total ${escapeHtml(currency)}</p>
+              <p class="kpi-value">${escapeHtml(formatted)}</p>
+              <p class="kpi-meta">Suma de ventas en ${escapeHtml(currency)}</p>
+            </article>`;
+        }).join("");
+      }
     }
 
-    const amount = state.records.reduce((acc, row) => {
-      // Prefer explicit Total column when available
-      const raw = row['Total'] ?? row.Total ?? getPossibleFieldValue(row, ["monto", "valor", "venta", "total", "importe"]);
-      return acc + parseCurrency(raw);
-    }, 0);
-
-    if (kpiAmount) {
-      kpiAmount.textContent = moneyFormatter.format(amount);
-    }
-
-    if (kpiRecords) {
-      kpiRecords.textContent = `${state.previewRows.length} registros en preview`;
-    }
   };
 
   const renderPreview = () => {
@@ -1081,9 +1268,6 @@ if (ventasPage) {
         : "El archivo no contiene filas validas para importar.";
     }
 
-    if (kpiFile) {
-      kpiFile.textContent = file.name;
-    }
   };
 
   const readDueDatesWorkbook = async (file) => {
@@ -1436,7 +1620,7 @@ if (ventasPage) {
     if (ventaChart) {
       try {
         ventaChart.destroy();
-      } catch (e) {}
+      } catch (e) { }
       ventaChart = null;
     }
     // remove key handler and restore focus
@@ -1493,10 +1677,10 @@ if (ventasPage) {
       const payload = await res.json();
       if (!payload.success) throw new Error(payload.message || "error");
 
-        const data = payload.data;
-        ventaDashboardCurrentId = Number(idVenta);
-        ventaDashboardCurrentClientId = Number(data?.cliente?.id_cliente || 0) || null;
-        ventaDashboardCurrentCurrency = String(data?.venta?.moneda || "COP").trim().toUpperCase() || "COP";
+      const data = payload.data;
+      ventaDashboardCurrentId = Number(idVenta);
+      ventaDashboardCurrentClientId = Number(data?.cliente?.id_cliente || 0) || null;
+      ventaDashboardCurrentCurrency = String(data?.venta?.moneda || "COP").trim().toUpperCase() || "COP";
       // Populate info into KPI header and animate numbers
       document.getElementById("venta-dashboard-title").textContent = `Venta ${data.venta.comprobante || "-"}`;
       document.getElementById("venta-dashboard-subtitle").textContent = `Cliente: ${data.cliente.nombre || "-"} (${data.cliente.identificacion || "-"})`;
@@ -1550,7 +1734,7 @@ if (ventasPage) {
       const labels = (data.aplicaciones_por_fecha || []).map((r) => r.fecha);
       const values = (data.aplicaciones_por_fecha || []).map((r) => Number(r.total_aplicado));
       if (ventaChart) {
-        try { ventaChart.destroy(); } catch (e) {}
+        try { ventaChart.destroy(); } catch (e) { }
       }
       try {
         ventaChart = new Chart(chartCanvas.getContext("2d"), {
@@ -1580,19 +1764,19 @@ if (ventasPage) {
         const spark = document.getElementById('venta-sparkline');
         if (spark && labels.length) {
           const ctx = spark.getContext('2d');
-          ctx.clearRect(0,0,spark.width,spark.height);
+          ctx.clearRect(0, 0, spark.width, spark.height);
           ctx.strokeStyle = 'rgba(16,42,71,0.9)';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          values.forEach((v,i)=>{
-            const x = (i/(values.length-1 || 1)) * (spark.width-8) + 4;
-            const max = Math.max(...values,1);
-            const y = spark.height - 6 - (v/max)*(spark.height-12);
-            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+          values.forEach((v, i) => {
+            const x = (i / (values.length - 1 || 1)) * (spark.width - 8) + 4;
+            const max = Math.max(...values, 1);
+            const y = spark.height - 6 - (v / max) * (spark.height - 12);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
           });
           ctx.stroke();
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // Open modal and manage focus
       prevFocusedElementForModal = document.activeElement;
@@ -1603,7 +1787,7 @@ if (ventasPage) {
       if (closeBtn && typeof closeBtn.focus === 'function') closeBtn.focus();
 
       // Trap focus inside modal and handle Escape
-      ventaModalKeyHandler = function(e) {
+      ventaModalKeyHandler = function (e) {
         if (e.key === 'Escape') {
           e.preventDefault();
           closeVentaDashboard();
@@ -3740,6 +3924,221 @@ if (transaccionesPage) {
       event.preventDefault();
       const id = tr.getAttribute("data-id");
       openTransaccionDashboard(Number.parseInt(id, 10));
+    }
+  });
+
+  // ── Notas Crédito ──────────────────────────────────────────────────────────
+
+  const ncModal = document.getElementById("nc-modal");
+  const ncOpenBtn = document.getElementById("open-nc-modal");
+  const ncCloseBtn = document.getElementById("nc-close-modal");
+  const ncFileInput = document.getElementById("nc-file-input");
+  const ncDropzone = document.getElementById("nc-dropzone");
+  const ncFileName = document.getElementById("nc-file-name");
+  const ncImportStatus = document.getElementById("nc-import-status");
+  const ncPreviewWrap = document.getElementById("nc-preview-wrap");
+  const ncPreviewBody = document.getElementById("nc-preview-body");
+  const ncPreviewCount = document.getElementById("nc-preview-count");
+  const ncSaveBtn = document.getElementById("nc-save-button");
+  const ncClearBtn = document.getElementById("nc-clear-button");
+  const ncSaveStatus = document.getElementById("nc-save-status");
+
+  let ncPreviewRows = [];
+  let ncVentasOptions = [];
+
+  const openNcModal = () => {
+    if (!ncModal) return;
+    ncModal.classList.add("is-open");
+    ncModal.setAttribute("aria-hidden", "false");
+    ncLoadVentasOptions();
+  };
+
+  const closeNcModal = () => {
+    if (!ncModal) return;
+    ncModal.classList.remove("is-open");
+    ncModal.setAttribute("aria-hidden", "true");
+  };
+
+  const ncLoadVentasOptions = async () => {
+    try {
+      const res = await apiFetch("/api/ventas/opciones-transaccion");
+      if (!res.ok) return;
+      const payload = await res.json();
+      ncVentasOptions = Array.isArray(payload.data) ? payload.data : [];
+    } catch (e) {
+      ncVentasOptions = [];
+    }
+  };
+
+  const ncVentasForNit = (nit) => {
+    const key = normalizeKey(nit);
+    return ncVentasOptions.filter((v) =>
+      normalizeKey(String(v.cliente_nit || "")) === key
+    );
+  };
+
+  const ncBuildSelectHtml = (nit, rowIndex) => {
+    const ventas = ncVentasForNit(nit);
+    if (!ventas.length) {
+      return `<select class="table-input nc-venta-select" data-nc-row="${rowIndex}" disabled>
+        <option value="">Sin ventas para este cliente</option>
+      </select>`;
+    }
+    const options = ventas.map((v) => {
+      const saldo = new Intl.NumberFormat("es-CO", { style: "decimal", maximumFractionDigits: 0 }).format(Number(v.saldo_venta || 0));
+      return `<option value="${escapeHtml(String(v.id_venta))}">${escapeHtml(v.comprobante || String(v.id_venta))} — Saldo: ${escapeHtml(saldo)} ${escapeHtml(String(v.moneda || "COP"))}</option>`;
+    }).join("");
+    return `<select class="table-input nc-venta-select" data-nc-row="${rowIndex}">
+      <option value="">— Seleccionar venta —</option>
+      ${options}
+    </select>`;
+  };
+
+  const ncRenderPreview = () => {
+    if (!ncPreviewBody) return;
+    if (!ncPreviewRows.length) {
+      if (ncPreviewWrap) ncPreviewWrap.hidden = true;
+      if (ncSaveBtn) ncSaveBtn.disabled = true;
+      return;
+    }
+    if (ncPreviewWrap) ncPreviewWrap.hidden = false;
+    if (ncPreviewCount) ncPreviewCount.textContent = `${ncPreviewRows.length} nota${ncPreviewRows.length !== 1 ? "s" : ""} crédito encontrada${ncPreviewRows.length !== 1 ? "s" : ""}`;
+
+    ncPreviewBody.innerHTML = ncPreviewRows.map((row, i) => {
+      const totalFmt = new Intl.NumberFormat("es-CO", { style: "decimal", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(row.total || 0));
+      return `<tr>
+        <td><strong>${escapeHtml(row.comprobante)}</strong></td>
+        <td>${escapeHtml(row.cliente)}</td>
+        <td>${escapeHtml(row.nit)}</td>
+        <td>${escapeHtml(formatDisplayDate(row.fecha_elaboracion))}</td>
+        <td><strong>${escapeHtml(row.moneda)}</strong></td>
+        <td class="font-bold text-right">${escapeHtml(totalFmt)}</td>
+        <td>${ncBuildSelectHtml(row.nit, i)}</td>
+      </tr>`;
+    }).join("");
+
+    if (ncSaveBtn) ncSaveBtn.disabled = false;
+  };
+
+  const ncBuildRows = (rows) =>
+    rows
+      .map((row) => {
+        const comprobante = getPossibleFieldValue(row, ["comprobante", "documento", "referencia"]);
+        const comp = String(comprobante || "").trim().toUpperCase();
+        if (!comp.startsWith("NC")) return null;
+
+        const rawTotal = getPossibleFieldValue(row, ["total", "monto", "valor", "venta", "importe"]);
+        const total = Math.abs(parseCurrency(rawTotal));
+
+        return {
+          comprobante,
+          cliente: getPossibleFieldValue(row, ["cliente", "nombre", "empresa"]),
+          nit: getPossibleFieldValue(row, ["identificacion", "nit", "documento cliente"]),
+          fecha_elaboracion: getPossibleFieldValue(row, ["fecha elaboracion", "fecha de elaboracion", "fecha_ elaboracion", "fecha"]),
+          moneda: getPossibleFieldValue(row, ["moneda"]) || "COP",
+          total: String(total)
+        };
+      })
+      .filter((r) => r !== null && r.nit && r.comprobante && Number(r.total) > 0);
+
+  const ncReadFile = async (file) => {
+    if (!window.XLSX) {
+      if (ncImportStatus) ncImportStatus.textContent = "No se pudo cargar la librería para leer Excel.";
+      return;
+    }
+    if (ncFileName) ncFileName.textContent = `Archivo: ${file.name}`;
+    if (ncImportStatus) ncImportStatus.textContent = "Procesando...";
+
+    const buffer = await file.arrayBuffer();
+    const workbook = window.XLSX.read(buffer, { type: "array" });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const parsed = parseVentasSheet(worksheet);
+
+    ncPreviewRows = ncBuildRows(parsed.rows);
+    ncRenderPreview();
+
+    if (ncImportStatus) {
+      ncImportStatus.textContent = ncPreviewRows.length
+        ? `${ncPreviewRows.length} nota${ncPreviewRows.length !== 1 ? "s" : ""} crédito detectada${ncPreviewRows.length !== 1 ? "s" : ""} de ${parsed.rows.length} filas totales.`
+        : "No se encontraron filas con comprobante NC en el archivo.";
+    }
+  };
+
+  const ncCollectRecords = () =>
+    ncPreviewRows.map((row, i) => {
+      const sel = ncPreviewBody?.querySelector(`select[data-nc-row="${i}"]`);
+      return { ...row, id_venta: sel?.value || "" };
+    });
+
+  const ncReset = () => {
+    ncPreviewRows = [];
+    if (ncFileInput) ncFileInput.value = "";
+    if (ncFileName) ncFileName.textContent = "Sin archivo seleccionado.";
+    if (ncImportStatus) ncImportStatus.textContent = "";
+    if (ncSaveStatus) ncSaveStatus.textContent = "";
+    if (ncPreviewWrap) ncPreviewWrap.hidden = true;
+    if (ncSaveBtn) ncSaveBtn.disabled = true;
+  };
+
+  ncOpenBtn?.addEventListener("click", openNcModal);
+  ncCloseBtn?.addEventListener("click", closeNcModal);
+  ncModal?.addEventListener("click", (e) => { if (e.target === ncModal) closeNcModal(); });
+  ncClearBtn?.addEventListener("click", ncReset);
+
+  ncFileInput?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !/\.(xlsx|xls)$/i.test(file.name)) return;
+    try { await ncReadFile(file); } catch (err) {
+      if (ncImportStatus) ncImportStatus.textContent = "Error leyendo el archivo.";
+    }
+  });
+
+  if (ncDropzone && ncFileInput) {
+    ["dragenter", "dragover"].forEach((ev) => ncDropzone.addEventListener(ev, (e) => { e.preventDefault(); ncDropzone.classList.add("is-dragover"); }));
+    ["dragleave", "drop"].forEach((ev) => ncDropzone.addEventListener(ev, (e) => { e.preventDefault(); ncDropzone.classList.remove("is-dragover"); }));
+    ncDropzone.addEventListener("drop", async (e) => {
+      const file = e.dataTransfer?.files?.[0];
+      if (!file || !/\.(xlsx|xls)$/i.test(file.name)) return;
+      try { await ncReadFile(file); } catch (err) {
+        if (ncImportStatus) ncImportStatus.textContent = "Error leyendo el archivo.";
+      }
+    });
+  }
+
+  ncSaveBtn?.addEventListener("click", async () => {
+    const records = ncCollectRecords();
+    const missing = records.filter((r) => !r.id_venta);
+    if (missing.length) {
+      if (ncSaveStatus) ncSaveStatus.textContent = `Faltan ${missing.length} venta(s) por seleccionar.`;
+      return;
+    }
+
+    ncSaveBtn.disabled = true;
+    if (ncSaveStatus) ncSaveStatus.textContent = "Guardando...";
+
+    try {
+      const res = await apiFetch("/api/notas-credito/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records })
+      });
+      const result = await res.json();
+
+      if (!res.ok || result.success === false) {
+        throw new Error(result.message || `Error ${res.status}`);
+      }
+
+      const msg = `${result.imported} nota${result.imported !== 1 ? "s" : ""} guardada${result.imported !== 1 ? "s" : ""}. Errores: ${result.failed}.`;
+      if (ncSaveStatus) ncSaveStatus.textContent = msg;
+
+      showToast({ title: "Notas Crédito guardadas", subtitle: msg, icon: "task_alt" });
+
+      await Promise.all([txLoadTransacciones(), txLoadGhosts(), txLoadVentasOptions(), txLoadClientesOptions(), txLoadBancosOptions()]);
+      ncReset();
+      closeNcModal();
+    } catch (err) {
+      if (ncSaveStatus) ncSaveStatus.textContent = `Error: ${err.message}`;
+      if (ncSaveBtn) ncSaveBtn.disabled = false;
     }
   });
 }

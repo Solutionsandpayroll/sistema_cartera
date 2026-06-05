@@ -93,7 +93,10 @@
               <span class="material-symbols-outlined">add_circle</span>
               Nueva planilla
             </button>
-             <!-- Removed Exportar reporte button -->
+            <button class="btn-secondary" id="open-nc-modal" type="button">
+              <span class="material-symbols-outlined">note_add</span>
+              Nueva Nota Crédito
+            </button>
           </div>
         </header>
 
@@ -383,6 +386,56 @@
       </div>
     </div>
 
+    <!-- Modal: Importar Notas Crédito -->
+    <div class="modal" id="nc-modal" aria-hidden="true" role="dialog" aria-labelledby="nc-modal-title">
+      <div class="modal-card modal-card-xl">
+        <button class="modal-close" type="button" id="nc-close-modal" aria-label="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+        <h2 id="nc-modal-title">Importar Notas Crédito</h2>
+        <p>Sube el archivo de ventas. Solo se procesarán las filas cuyo comprobante comience con <strong>NC</strong>. Los valores negativos se guardan como positivos y se aplican como abonos a la venta seleccionada.</p>
+
+        <div class="upload-dropzone" id="nc-dropzone">
+          <span class="material-symbols-outlined">upload_file</span>
+          <p>Arrastra el archivo aquí o selecciona manualmente.</p>
+          <small>Formatos permitidos: .xlsx, .xls</small>
+          <input id="nc-file-input" type="file" accept=".xlsx,.xls" />
+        </div>
+
+        <div class="upload-meta">
+          <p id="nc-file-name">Sin archivo seleccionado.</p>
+          <p id="nc-import-status">Esperando carga de archivo.</p>
+        </div>
+
+        <div style="margin-top:1rem;overflow-x:auto;" id="nc-preview-wrap" hidden>
+          <p style="font-size:0.82rem;color:#555;margin:0 0 0.5rem 0;">
+            <span id="nc-preview-count">0 registros</span>
+          </p>
+          <table class="data-table" id="nc-preview-table">
+            <thead>
+              <tr>
+                <th>Comprobante</th>
+                <th>Cliente</th>
+                <th>NIT</th>
+                <th>Fecha Elaboración</th>
+                <th>Moneda</th>
+                <th>Total</th>
+                <th>Venta a aplicar</th>
+              </tr>
+            </thead>
+            <tbody id="nc-preview-body"></tbody>
+          </table>
+        </div>
+
+        <div style="display:flex;gap:0.75rem;margin-top:1.25rem;justify-content:flex-end;">
+          <button class="btn-secondary" type="button" id="nc-clear-button">Limpiar</button>
+          <button class="btn-primary" type="button" id="nc-save-button" disabled>Guardar Notas Crédito</button>
+        </div>
+        <p id="nc-save-status" style="font-size:0.82rem;color:#7a9bbf;margin-top:0.5rem;text-align:right;"></p>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="auth-guard.js"></script>
     <script src="app.js"></script>
   </body>

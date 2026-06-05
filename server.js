@@ -440,7 +440,16 @@ const parseCurrency = (value) => {
       clean = clean.replace(/,/g, "");
     }
   } else if (lastComma > -1) {
-    clean = clean.replace(/\./g, "").replace(/,/g, ".");
+    const commaParts = clean.split(",");
+    const hasThousandGroupingByComma = commaParts.length > 1 && commaParts.every((part, index) => {
+      if (index === 0) return /^\d+$/.test(part);
+      return /^\d{3}$/.test(part);
+    });
+    if (hasThousandGroupingByComma) {
+      clean = commaParts.join("");
+    } else {
+      clean = clean.replace(/\./g, "").replace(/,/g, ".");
+    }
   } else if (lastDot > -1) {
     const dotParts = clean.split(".");
     const hasThousandGrouping = dotParts.length > 1 && dotParts.every((part, index) => {
@@ -3627,6 +3636,141 @@ app.get("/api/backup/export", async (req, res) => {
     await workbook.xlsx.write(res);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/notas-credito/import
+ * Importa notas crédito (comprobantes NC) como transacciones aplicadas a ventas.
+ * Body: { records: [{ comprobante, cliente, nit, fecha_elaboracion, moneda, total, id_venta }] }
+ */
+app.post("/api/notas-credito/import", async (req, res) => {
+  const { records } = req.body;
+
+  if (!Array.isArray(records) || records.length === 0) {
+    return res.status(400).json({ success: false, message: "No se recibieron registros." });
+  }
+
+  const client = await pool.connect();
+  const results = { success: true, total: records.length, imported: 0, failed: 0, errors: [] };
+
+  try {
+    await client.query("BEGIN");
+
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
+      try {
+        const nit = normalizeValue(String(record.nit || ""));
+        const nombre = normalizeValue(String(record.cliente || ""));
+        const comprobante = normalizeValue(String(record.comprobante || ""));
+        const fechaStr = normalizeValue(String(record.fecha_elaboracion || ""));
+        const moneda = normalizeValue(String(record.moneda || "")) || "COP";
+        const idVentaRaw = record.id_venta;
+        const valor = Math.abs(parseCurrency(String(record.total || "0")));
+
+        if (!nit || !nombre) {
+          results.errors.push({ row: i + 1, error: "NIT y Cliente son requeridos." });
+          results.failed++;
+          continue;
+        }
+        if (!comprobante) {
+          results.errors.push({ row: i + 1, error: "Comprobante es requerido." });
+          results.failed++;
+          continue;
+        }
+        if (!idVentaRaw) {
+          results.errors.push({ row: i + 1, error: `NC ${comprobante}: debe seleccionar una venta.` });
+          results.failed++;
+          continue;
+        }
+        if (valor <= 0) {
+          results.errors.push({ row: i + 1, error: `NC ${comprobante}: el valor debe ser mayor a 0.` });
+          results.failed++;
+          continue;
+        }
+
+        const idVenta = Number.parseInt(String(idVentaRaw), 10);
+        if (!Number.isFinite(idVenta) || idVenta <= 0) {
+          results.errors.push({ row: i + 1, error: `NC ${comprobante}: ID de venta inválido.` });
+          results.failed++;
+          continue;
+        }
+
+        // Buscar o crear cliente
+        let idCliente;
+        const clienteRes = await client.query(
+          "SELECT id_cliente FROM cliente WHERE identificacion = $1",
+          [nit]
+        );
+        if (clienteRes.rows.length > 0) {
+          idCliente = clienteRes.rows[0].id_cliente;
+        } else {
+          const newCliente = await client.query(
+            "INSERT INTO cliente (identificacion, nombre) VALUES ($1, $2) RETURNING id_cliente",
+            [nit, nombre]
+          );
+          idCliente = newCliente.rows[0].id_cliente;
+        }
+
+        // Verificar que la venta pertenece al mismo cliente y obtener saldo actual
+        const ventaRes = await client.query(
+          `SELECT v.id_venta, v.id_cliente, v.total,
+                  COALESCE(SUM(ap.valor_aplicado), 0)::NUMERIC(15,2) AS total_aplicado
+           FROM venta v
+           LEFT JOIN aplicacion_pago ap ON ap.id_venta = v.id_venta
+           WHERE v.id_venta = $1
+           GROUP BY v.id_venta, v.id_cliente, v.total`,
+          [idVenta]
+        );
+        if (!ventaRes.rows.length) {
+          results.errors.push({ row: i + 1, error: `NC ${comprobante}: venta #${idVenta} no encontrada.` });
+          results.failed++;
+          continue;
+        }
+        if (String(ventaRes.rows[0].id_cliente) !== String(idCliente)) {
+          results.errors.push({ row: i + 1, error: `NC ${comprobante}: la venta #${idVenta} no pertenece al cliente.` });
+          results.failed++;
+          continue;
+        }
+
+        // Si la NC supera el saldo pendiente de la venta, solo aplica hasta cubrir la venta
+        const saldoVenta = Math.max(0, Number(ventaRes.rows[0].total) - Number(ventaRes.rows[0].total_aplicado));
+        const valorAplicar = saldoVenta > 0 ? Math.min(valor, saldoVenta) : 0;
+
+        const fecha = fechaStr ? parseDate(fechaStr) : new Date().toISOString();
+
+        // Crear transacción con el valor completo de la NC (el excedente queda como saldo)
+        const txRes = await client.query(
+          `INSERT INTO transaccion (id_cliente, fecha, nombre, descripcion, referencia, valor, moneda, id_banco, soporte)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, false)
+           RETURNING id_transaccion`,
+          [idCliente, fecha || new Date().toISOString(), nombre, `Nota Crédito: ${comprobante}`, comprobante, valor, moneda]
+        );
+        const idTransaccion = txRes.rows[0].id_transaccion;
+
+        // Aplicar solo el monto que cabe en el saldo de la venta
+        if (valorAplicar > 0) {
+          await client.query(
+            `INSERT INTO aplicacion_pago (id_transaccion, id_venta, valor_aplicado, tipo_cambio, valor_aplicado_transaccion)
+             VALUES ($1, $2, $3, 1, $3)`,
+            [idTransaccion, idVenta, valorAplicar]
+          );
+        }
+
+        results.imported++;
+      } catch (err) {
+        results.errors.push({ row: i + 1, error: err.message });
+        results.failed++;
+      }
+    }
+
+    await client.query("COMMIT");
+    res.json(results);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    res.status(500).json({ success: false, message: err.message, errors: results.errors });
+  } finally {
+    client.release();
   }
 });
 
