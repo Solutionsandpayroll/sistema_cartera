@@ -1255,6 +1255,7 @@ app.get("/api/transacciones", async (req, res) => {
         t.id_transaccion,
         t.fecha,
         t.valor,
+        t.comisiones,
         t.moneda,
         t.moneda_referencia,
         t.valor_equivalente,
@@ -1742,10 +1743,12 @@ app.post("/api/transacciones/bulk", async (req, res) => {
           }
         }
 
+        const comisiones = parseCurrency(row.comisiones ?? 0);
+
         const transaccionResult = await client.query(
           `INSERT INTO transaccion
-           (id_cliente, fecha, nombre, descripcion, referencia, documento, valor, moneda, id_banco, soporte, tipo_cambio, moneda_referencia, valor_equivalente)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           (id_cliente, fecha, nombre, descripcion, referencia, documento, valor, moneda, id_banco, soporte, tipo_cambio, moneda_referencia, valor_equivalente, comisiones)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
            RETURNING id_transaccion`,
           [
             idCliente,
@@ -1760,7 +1763,8 @@ app.post("/api/transacciones/bulk", async (req, res) => {
             soporte,
             tipoCambio,
             monedaReferencia,
-            valorEquivalente
+            valorEquivalente,
+            comisiones >= 0 ? comisiones : 0
           ]
         );
 

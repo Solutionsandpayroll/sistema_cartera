@@ -535,6 +535,15 @@
                 </div>
                 </div>
 
+                <div class="filter-group hidden" id="filter-saldo-pendiente-group">
+                  <label class="filter-label">Estado de saldo</label>
+                  <select id="filter-saldo-pendiente" class="filter-select">
+                    <option value="">Todas las ventas</option>
+                    <option value="pendiente">Solo con saldo pendiente</option>
+                    <option value="completado">Solo saldadas</option>
+                  </select>
+                </div>
+
                 <div class="flex gap-3">
                 <button class="btn-filter" id="btn-aplicar-filtros">
                   <span class="inline-flex items-center gap-2">
@@ -1177,6 +1186,7 @@
         const bancoId = document.getElementById("filter-banco")?.value || "";
         const fechaInicio = document.getElementById("filter-fecha-inicio")?.value || "";
         const fechaFin = document.getElementById("filter-fecha-fin")?.value || "";
+        const saldoPendiente = document.getElementById("filter-saldo-pendiente")?.value || "";
 
         const base = {
           moneda: moneda || undefined,
@@ -1188,7 +1198,8 @@
           return {
             ...base,
             tipo_dato: "ambos",
-            cliente_id: clienteId || undefined
+            cliente_id: clienteId || undefined,
+            venta_estado_abono: saldoPendiente || undefined
           };
         }
 
@@ -1196,7 +1207,8 @@
           return {
             ...base,
             tipo_dato: "ventas",
-            cliente_id: clienteId || undefined
+            cliente_id: clienteId || undefined,
+            venta_estado_abono: saldoPendiente || undefined
           };
         }
 
@@ -1998,6 +2010,17 @@
           }
         });
 
+        // Mostrar filtro de saldo pendiente solo en ventas y clientes
+        const saldoPendienteGroup = document.getElementById('filter-saldo-pendiente-group');
+        if (saldoPendienteGroup) {
+          const showSaldo = section === 'ventas' || section === 'clientes';
+          saldoPendienteGroup.classList.toggle('hidden', !showSaldo);
+          if (!showSaldo) {
+            const sel = document.getElementById('filter-saldo-pendiente');
+            if (sel) sel.value = '';
+          }
+        }
+
         // Configurar slider
         const sliderWrap = document.querySelector('.filter-group[data-filter="slider"]');
         const slider = document.getElementById('filter-slider');
@@ -2258,6 +2281,8 @@
         document.getElementById("filter-banco").value = "";
         document.getElementById("filter-fecha-inicio").value = "";
         document.getElementById("filter-fecha-fin").value = "";
+        const saldoSel = document.getElementById("filter-saldo-pendiente");
+        if (saldoSel) saldoSel.value = "";
         const slider = document.getElementById('filter-slider');
         const sliderInput = document.getElementById('filter-slider-input');
         if (slider) slider.value = '0';

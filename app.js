@@ -2293,6 +2293,7 @@ if (transaccionesPage) {
     "Banco",
     "Moneda",
     "Valor",
+    "Comisiones",
     "Aplicado",
     "Saldo"
   ];
@@ -3008,6 +3009,7 @@ if (transaccionesPage) {
       </td>
       <td><input data-field="referencia" type="text" placeholder="Referencia" value="${txEscapeHtml(defaults.referencia || "")}" /></td>
       <td><input data-field="descripcion" type="text" placeholder="Descripcion" value="${txEscapeHtml(defaults.descripcion || "")}" /></td>
+      <td><input data-field="comisiones" type="text" inputmode="decimal" placeholder="0" value="${txEscapeHtml(defaults.comisiones || "")}" /></td>
       <td>
         <button type="button" class="tx-row-remove" title="Eliminar fila">
           <span class="material-symbols-outlined">delete</span>
@@ -3113,6 +3115,7 @@ if (transaccionesPage) {
       const idBanco = rowEl.querySelector('[data-field="id-banco"]')?.value || null;
       const referencia = rowEl.querySelector('[data-field="referencia"]')?.value || "";
       const descripcion = rowEl.querySelector('[data-field="descripcion"]')?.value || "";
+      const comisionesRaw = rowEl.querySelector('[data-field="comisiones"]')?.value || "";
       const isGhost =
         rawVenta === "sin-venta" &&
         clienteSelectValue === "cliente:no-registrado" &&
@@ -3180,7 +3183,8 @@ if (transaccionesPage) {
         moneda_referencia: needsConversion ? (saleCurrency || "COP") : null,
         id_banco: idBanco ? Number.parseInt(idBanco, 10) : null,
         referencia: referencia.trim(),
-        descripcion: descripcion.trim()
+        descripcion: descripcion.trim(),
+        comisiones: comisionesRaw.trim() ? txParseCurrency(comisionesRaw) : 0
       });
     });
 
@@ -3328,6 +3332,7 @@ if (transaccionesPage) {
         const bancoCell = `<td data-col="${key("Banco")}">${txEscapeHtml(row.banco_nombre || "-")}</td>`;
         const monedaCell = `<td data-col="${key("Moneda")}"><strong>${txEscapeHtml(String(row.moneda || "-").toUpperCase())}</strong></td>`;
         const valorCell = `<td data-col="${key("Valor")}" class="font-bold text-right">${txEscapeHtml(money(row.valor))}</td>`;
+        const comisionesCell = `<td data-col="${key("Comisiones")}" class="text-right">${txEscapeHtml(money(row.comisiones || 0))}</td>`;
         const aplicadoCell = `<td data-col="${key("Aplicado")}" class="text-green-600 font-bold text-right">${txEscapeHtml(money(row.total_aplicado))}</td>`;
         const saldoCell = `<td data-col="${key("Saldo")}" class="text-red-600 font-bold text-right">${txEscapeHtml(money(row.saldo_transaccion))}</td>`;
 
@@ -3340,6 +3345,7 @@ if (transaccionesPage) {
           bancoCell,
           monedaCell,
           valorCell,
+          comisionesCell,
           aplicadoCell,
           saldoCell
         ].join("");
@@ -3422,6 +3428,7 @@ if (transaccionesPage) {
       const tipoCambioEl = document.getElementById("tx-detail-tipo-cambio");
       const monedaReferenciaEl = document.getElementById("tx-detail-moneda-referencia");
       const valorEquivalenteEl = document.getElementById("tx-detail-valor-equivalente");
+      const comisionesEl = document.getElementById("tx-detail-comisiones");
       const bancoEl = document.getElementById("tx-detail-banco");
       const referenciaEl = document.getElementById("tx-detail-referencia");
       const documentoEl = document.getElementById("tx-detail-documento");
@@ -3466,6 +3473,11 @@ if (transaccionesPage) {
         const valorEquivalente = Number(transaccion.valor_equivalente || 0);
         const monedaReferencia = String(transaccion.moneda_referencia || "").trim().toUpperCase();
         valorEquivalenteEl.textContent = valorEquivalente > 0 && monedaReferencia ? txFormatAmountWithCurrency(valorEquivalente, monedaReferencia) : "-";
+      }
+
+      if (comisionesEl) {
+        const comisiones = Number(transaccion.comisiones || 0);
+        comisionesEl.textContent = comisiones > 0 ? txFormatAmountWithCurrency(comisiones, transaccion.moneda || "") : "-";
       }
 
       if (bancoEl) {
