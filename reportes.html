@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sistema Cartera | Reportes</title>
+    <link rel="icon" type="image/png" href="Logo_syp_original.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -218,6 +219,14 @@
         color: #991b1b;
       }
 
+      .data-table tbody tr.tx-row {
+        background: #fffbeb;
+      }
+
+      .data-table tbody tr.tx-row:hover {
+        background: #fef3c7;
+      }
+
       .cards-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -354,7 +363,7 @@
       <aside class="sidebar">
         <div>
           <div class="brand">
-            <div class="brand-mark">SC</div>
+            <img class="brand-mark" src="Logo_syp_blanco.png" alt="Logo SYP">
             <div>
               <p class="brand-title">Sistema Cartera</p>
               <p class="brand-subtitle">Panel operativo</p>
@@ -683,11 +692,14 @@
                         <th>Aplicado</th>
                         <th>Saldo</th>
                         <th>Estado</th>
+                        <th>Transacciones relacionadas</th>
+                        <th>Fechas de transacciones</th>
+                        <th>Bancos</th>
                       </tr>
                     </thead>
                     <tbody id="tabla-ventas-body">
                       <tr>
-                        <td colspan="12" class="no-data">
+                        <td colspan="15" class="no-data">
                           <div class="no-data-icon">📊</div>
                           <p>Selecciona filtros y aplica para ver datos</p>
                         </td>
@@ -874,9 +886,32 @@
         transacciones: []
       };
 
+      // Transacciones sin venta asociada: se muestran en la tabla de ventas pero
+      // no forman parte de currentDataRaw.ventas (KPIs, dropdowns de aplicación).
+      let transaccionesSinVentaCache = [];
+
       // ==========================================
       // UTILIDADES
       // ==========================================
+
+      // Intercala las transacciones sin venta al final del bloque de cada cliente.
+      // Requiere ambos arreglos ordenados por nombre de cliente.
+      function mergeVentasConTransaccionesSinVenta(ventas, transacciones) {
+        const norm = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const out = [];
+        let vi = 0;
+        let ti = 0;
+        while (vi < ventas.length && ti < transacciones.length) {
+          if (norm(transacciones[ti].cliente_nombre) < norm(ventas[vi].cliente_nombre)) {
+            out.push(transacciones[ti++]);
+          } else {
+            out.push(ventas[vi++]);
+          }
+        }
+        while (vi < ventas.length) out.push(ventas[vi++]);
+        while (ti < transacciones.length) out.push(transacciones[ti++]);
+        return out;
+      }
 
       const formatCurrency = (value, decimals = 2) => {
         return new Intl.NumberFormat("es-CO", {
@@ -1047,6 +1082,7 @@
           if (currentSection === 'clientes' && !currentFilters.cliente_id) {
             currentData = { ventas: [], transacciones: [], agregados: {} };
             currentDataRaw = { ventas: [], transacciones: [] };
+            transaccionesSinVentaCache = [];
             updateStatistics();
             renderTablesData();
             updateCharts();
@@ -1081,7 +1117,8 @@
 
           currentDataRaw.ventas = datosResult.data.ventas || [];
           currentDataRaw.transacciones = datosResult.data.transacciones || [];
-          currentData.ventas = [...currentDataRaw.ventas];
+          transaccionesSinVentaCache = datosResult.data.transacciones_sin_venta || [];
+          currentData.ventas = mergeVentasConTransaccionesSinVenta(currentDataRaw.ventas, transaccionesSinVentaCache);
           currentData.transacciones = [...currentDataRaw.transacciones];
           currentData.agregados = agregadosResult.data;
 
@@ -1169,11 +1206,11 @@
         const sliderWrap = document.querySelector('.filter-group[data-filter="slider"]');
         const sliderMode = sliderWrap?.dataset.sliderMode || '';
 
-        currentData.ventas = [...(currentDataRaw.ventas || [])];
+        currentData.ventas = mergeVentasConTransaccionesSinVenta(currentDataRaw.ventas || [], transaccionesSinVentaCache);
         currentData.transacciones = [...(currentDataRaw.transacciones || [])];
 
         if (sliderMode === 'ventas_saldo') {
-          currentData.ventas = currentData.ventas.filter((v) => Number(v.saldo_venta || 0) >= sliderValue);
+          currentData.ventas = currentData.ventas.filter((v) => v.es_transaccion || Number(v.saldo_venta || 0) >= sliderValue);
         }
         if (sliderMode === 'tx_monto') {
           currentData.transacciones = currentData.transacciones.filter((t) => Number(t.valor || 0) >= sliderValue);
@@ -1230,7 +1267,7 @@
       }
 
       function updateStatistics() {
-        const ventas = currentData.ventas || [];
+        const ventas = (currentData.ventas || []).filter((v) => !v.es_transaccion);
         const transacciones = currentData.transacciones || [];
 
         const label1 = document.getElementById('stat-label-1');
@@ -1318,7 +1355,7 @@
         if (requiresClientSelection) {
           ventasBody.innerHTML = `
             <tr>
-              <td colspan="12" class="no-data">
+              <td colspan="15" class="no-data">
                 <div class="no-data-icon">👤</div>
                 <p><strong>Selecciona un cliente</strong> para ver sus ventas.</p>
                 <p class="text-sm">Usa el filtro “Cliente” y luego “Aplicar Filtros”.</p>
@@ -1328,7 +1365,7 @@
         } else if (currentData.ventas.length === 0) {
           ventasBody.innerHTML = `
             <tr>
-              <td colspan="12" class="no-data">
+              <td colspan="15" class="no-data">
                 <div class="no-data-icon">📊</div>
                 <p>No hay datos de ventas</p>
               </td>
@@ -1336,8 +1373,8 @@
           `;
         } else {
           ventasBody.innerHTML = currentData.ventas.map(venta => `
-            <tr>
-              <td><strong>#${venta.id_venta}</strong></td>
+            <tr${venta.es_transaccion ? ' class="tx-row"' : ''}>
+              <td>${venta.es_transaccion ? `<span class="badge badge-warning">Tx #${venta.id_transaccion}</span>` : `<strong>#${venta.id_venta}</strong>`}</td>
               <td>${venta.cliente_nombre}</td>
               <td>${venta.cliente_nit}</td>
               <td>${formatDate(venta.fecha_elaboracion)}</td>
@@ -1345,10 +1382,13 @@
               <td>${venta.comprobante || '-'}</td>
               <td><span class="badge badge-warning">${venta.tipo_transaccion || '-'}</span></td>
               <td><strong>${venta.moneda}</strong></td>
-              <td>${formatCurrency(venta.total)}</td>
+              <td>${venta.es_transaccion ? '-' : formatCurrency(venta.total)}</td>
               <td class="text-green-600 font-bold">${formatCurrency(venta.total_aplicado)}</td>
               <td class="text-red-600 font-bold">${formatCurrency(venta.saldo_venta)}</td>
               <td><span class="badge badge-success">${venta.estado_envio_correo || 'N/A'}</span></td>
+              <td class="text-left">${venta.transacciones_asociadas || 'Sin aplicar'}</td>
+              <td class="text-left">${venta.fechas_transacciones || '-'}</td>
+              <td>${venta.bancos_relacionados || '-'}</td>
             </tr>
           `).join("");
         }
@@ -1564,7 +1604,7 @@
           padding: 12
         };
 
-        const ventas = currentData.ventas || [];
+        const ventas = (currentData.ventas || []).filter((v) => !v.es_transaccion);
         const transacciones = currentData.transacciones || [];
 
         const section = currentSection;
@@ -2426,6 +2466,9 @@
         ];
         if (includeSaldos) columns.push({ header: "Saldo", dataKey: "saldo_venta" });
         columns.push({ header: "Estado", dataKey: "estado_envio_correo" });
+        columns.push({ header: "Transacciones relacionadas", dataKey: "transacciones_asociadas" });
+        columns.push({ header: "Fechas de transacciones", dataKey: "fechas_transacciones" });
+        columns.push({ header: "Bancos", dataKey: "bancos_relacionados" });
 
         const tableData = (currentData.ventas || []).slice().sort((a, b) => {
           const clienteA = String(a.cliente_nombre || '').toLocaleLowerCase('es');
@@ -2434,11 +2477,15 @@
           return Number(b.id_venta || 0) - Number(a.id_venta || 0);
         }).map(v => ({
           ...v,
+          id_venta: v.es_transaccion ? `Tx #${v.id_transaccion}` : v.id_venta,
           fecha_elaboracion: formatDate(v.fecha_elaboracion),
           fecha_vencimiento: formatDate(v.fecha_vencimiento),
-          total: formatCurrency(v.total),
+          total: v.es_transaccion ? '-' : formatCurrency(v.total),
           total_aplicado: formatCurrency(v.total_aplicado),
-          saldo_venta: formatCurrency(v.saldo_venta)
+          saldo_venta: formatCurrency(v.saldo_venta),
+          transacciones_asociadas: v.transacciones_asociadas || 'Sin aplicar',
+          fechas_transacciones: v.fechas_transacciones || '-',
+          bancos_relacionados: v.bancos_relacionados || '-'
         }));
 
         doc.setFontSize(16);
@@ -2453,10 +2500,11 @@
         });
 
         if (includeTotales) {
+          const ventasTotales = (currentData.ventas || []).filter((v) => !v.es_transaccion);
           const totalRow = columns.map(c => {
-            if (c.dataKey === "total") return formatCurrency((currentData.ventas || []).reduce((a, v) => a + Number(v.total || 0), 0));
-            if (c.dataKey === "total_aplicado") return formatCurrency((currentData.ventas || []).reduce((a, v) => a + Number(v.total_aplicado || 0), 0));
-            if (c.dataKey === "saldo_venta") return formatCurrency((currentData.ventas || []).reduce((a, v) => a + Number(v.saldo_venta || 0), 0));
+            if (c.dataKey === "total") return formatCurrency(ventasTotales.reduce((a, v) => a + Number(v.total || 0), 0));
+            if (c.dataKey === "total_aplicado") return formatCurrency(ventasTotales.reduce((a, v) => a + Number(v.total_aplicado || 0), 0));
+            if (c.dataKey === "saldo_venta") return formatCurrency(ventasTotales.reduce((a, v) => a + Number(v.saldo_venta || 0), 0));
             return "";
           });
 

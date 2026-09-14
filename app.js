@@ -3019,6 +3019,32 @@ if (transaccionesPage) {
 
     txPlanBody.appendChild(row);
 
+    if (defaults.moneda) {
+      const monedaSelect = row.querySelector('[data-field="moneda"]');
+      if (monedaSelect) {
+        monedaSelect.value = String(defaults.moneda).toUpperCase();
+      }
+    }
+
+    if (defaults.id_banco) {
+      const bancoSelect = row.querySelector('[data-field="banco"]');
+      const banco = txState.bancosOptions.find((item) => String(item.id_banco) === String(defaults.id_banco));
+      const preset = banco
+        ? txBankPresets.find((item) =>
+            item.aliases.some((alias) => {
+              const normalizedAlias = txNormalizeBankName(alias);
+              return (
+                txNormalizeBankName(banco.nombre).includes(normalizedAlias) ||
+                txNormalizeBankName(banco.codigo).includes(normalizedAlias)
+              );
+            })
+          )
+        : null;
+      if (bancoSelect && preset) {
+        bancoSelect.value = `preset:${preset.key}`;
+      }
+    }
+
     const clientSelect = row.querySelector('[data-field="cliente-select"]');
     const ventaSelect = row.querySelector('[data-field="venta"]');
 
@@ -3711,6 +3737,261 @@ if (transaccionesPage) {
     if (txPlanStatus) {
       txPlanStatus.textContent = "Planilla reiniciada.";
     }
+    const planoStatusEl = document.getElementById("tx-plano-status");
+    if (planoStatusEl) {
+      planoStatusEl.textContent = "";
+    }
+  });
+
+  // ── Subir plano: importa un Excel y llena la planilla de transacciones ──
+  const txSubirPlanoButton = document.getElementById("tx-subir-plano");
+  const txPlanoInput = document.getElementById("tx-plano-input");
+  const txDescargarPlantillaButton = document.getElementById("tx-descargar-plantilla");
+  const txPlanoStatus = document.getElementById("tx-plano-status");
+
+  const txPlanoDocKey = (value) => txNormalize(String(value ?? "").replace(/[^a-zA-Z0-9]/g, ""));
+
+  const txPlanoDateToInput = (value) => {
+    if (value === null || value === undefined || value === "") return "";
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}T${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+    }
+
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      const utc = new Date(Math.round(Date.UTC(1899, 11, 30) + value * 86400000));
+      if (!Number.isNaN(utc.getTime())) {
+        return `${utc.getUTCFullYear()}-${String(utc.getUTCMonth() + 1).padStart(2, "0")}-${String(utc.getUTCDate()).padStart(2, "0")}T${String(utc.getUTCHours()).padStart(2, "0")}:${String(utc.getUTCMinutes()).padStart(2, "0")}`;
+      }
+      return "";
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return "";
+
+    let parsed = null;
+    const dmy = raw.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})(?:[T\s](\d{1,2}):(\d{2}))?/);
+    const iso = raw.match(/^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+
+    if (dmy) {
+      let year = Number.parseInt(dmy[3], 10);
+      if (String(dmy[3]).length < 4) year = year >= 70 ? 1900 + year : 2000 + year;
+      parsed = new Date(year, Number(dmy[2]) - 1, Number(dmy[1]), Number(dmy[4] || 0), Number(dmy[5] || 0));
+    } else if (iso) {
+      parsed = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), Number(iso[4] || 0), Number(iso[5] || 0));
+    } else {
+      parsed = new Date(raw);
+    }
+
+    if (!parsed || Number.isNaN(parsed.getTime())) return "";
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}T${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+  };
+
+  const txPlanoColumnMap = (headerCells) => {
+    const map = {};
+    (headerCells || []).forEach((cell, idx) => {
+      const key = txNormalize(cell);
+      if (!key || key === "null" || key === "undefined") return;
+      if (key.includes("fecha") && !key.includes("venc")) map.fecha = idx;
+      else if (key.includes("nit") || key.includes("identificac") || key.includes("documento")) map.nit = idx;
+      else if (key.includes("cliente")) map.cliente = idx;
+      else if (key.includes("venta")) map.venta = idx;
+      else if (key.includes("valor") || key.includes("monto") || key.includes("total")) map.valor = idx;
+      else if (key.includes("moneda")) map.moneda = idx;
+      else if (key.includes("banco")) map.banco = idx;
+      else if (key.includes("referencia")) map.referencia = idx;
+      else if (key.includes("comision")) map.comisiones = idx;
+      else if (key.includes("descr")) map.descripcion = idx;
+    });
+    return map;
+  };
+
+  const txLoadPlanoFile = async (file) => {
+    if (!window.XLSX) {
+      showToast({ title: "Error", subtitle: "La libreria de Excel no esta disponible", icon: "error" });
+      return;
+    }
+
+    if (txPlanoStatus) {
+      txPlanoStatus.textContent = "Procesando plano...";
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = window.XLSX.read(buffer, { type: "array" });
+      const sheet = workbook.Sheets?.[workbook.SheetNames?.[0]];
+      if (!sheet) {
+        throw new Error("El archivo no contiene hojas legibles");
+      }
+
+      const matrix = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false });
+
+      let headerIndex = -1;
+      let cols = {};
+      for (let i = 0; i < Math.min(matrix.length, 10); i++) {
+        const candidate = txPlanoColumnMap(matrix[i]);
+        if (candidate.valor !== undefined && (candidate.nit !== undefined || candidate.cliente !== undefined || candidate.venta !== undefined)) {
+          headerIndex = i;
+          cols = candidate;
+          break;
+        }
+      }
+
+      if (headerIndex === -1) {
+        throw new Error('No se encontro la fila de encabezados (se requiere "Valor" y al menos una de Cliente / NIT / Venta destino)');
+      }
+
+      txPlanBody.innerHTML = "";
+
+      let created = 0;
+      let flagged = 0;
+      const warnings = [];
+
+      for (let i = headerIndex + 1; i < matrix.length; i++) {
+        const cells = matrix[i] || [];
+        const get = (key) => (cols[key] === undefined ? "" : cells[cols[key]]);
+        const text = (key) => String(get(key) ?? "").trim();
+
+        const valor = text("valor");
+        const nit = text("nit");
+        const clienteNombre = text("cliente");
+        const ventaRaw = text("venta");
+        const bancoRaw = text("banco");
+        const referencia = text("referencia");
+        const descripcion = text("descripcion");
+        const comisiones = text("comisiones");
+        const monedaRaw = txNormalize(text("moneda")).toUpperCase();
+
+        if (!valor && !nit && !clienteNombre && !ventaRaw && !referencia && !descripcion) {
+          continue;
+        }
+
+        const rowWarnings = [];
+
+        let venta = null;
+        if (ventaRaw) {
+          const ventaNumber = Number.parseInt(ventaRaw, 10);
+          venta =
+            txState.ventasOptions.find((v) =>
+              (String(ventaNumber) === ventaRaw && Number(v.id_venta) === ventaNumber) ||
+              (v.comprobante && txNormalize(v.comprobante) === txNormalize(ventaRaw))
+            ) || null;
+          if (!venta) {
+            rowWarnings.push(`Venta destino "${ventaRaw}" no existe`);
+          }
+        }
+
+        let cliente = null;
+        if (nit) {
+          const nitKey = txPlanoDocKey(nit);
+          cliente = txState.clientesOptions.find((c) => txPlanoDocKey(c.identificacion) === nitKey) || null;
+          if (!cliente) {
+            rowWarnings.push("Cliente no registrado (NIT no encontrado)");
+          }
+        } else if (clienteNombre) {
+          cliente = txState.clientesOptions.find((c) => txNormalize(c.nombre) === txNormalize(clienteNombre)) || null;
+          if (!cliente) {
+            rowWarnings.push("Cliente no encontrado por nombre");
+          }
+        }
+
+        if (venta) {
+          const ventaCliente = txState.clientesOptions.find((c) => Number(c.id_cliente) === Number(venta.id_cliente)) || null;
+          if (cliente && ventaCliente && Number(cliente.id_cliente) !== Number(ventaCliente.id_cliente)) {
+            rowWarnings.push("El NIT no coincide con el cliente de la venta; se usara el de la venta");
+          }
+          cliente = ventaCliente;
+        }
+
+        let idBanco = "";
+        if (bancoRaw) {
+          const bancoKey = txNormalize(bancoRaw);
+          const preset =
+            txBankPresets.find((item) => item.aliases.some((alias) => txNormalize(alias) === bancoKey)) ||
+            txBankPresets.find((item) =>
+              item.aliases.some((alias) => {
+                const normalizedAlias = txNormalize(alias);
+                return bancoKey.includes(normalizedAlias) || normalizedAlias.includes(bancoKey);
+              })
+            );
+          const resolved = preset
+            ? txResolvePresetBank(preset.key)
+            : txState.bancosOptions.find((b) => txNormalize(b.nombre) === bancoKey);
+          if (resolved) {
+            idBanco = String(resolved.id_banco);
+          } else {
+            rowWarnings.push(`Banco "${bancoRaw}" no reconocido`);
+          }
+        }
+
+        const fecha = cols.fecha === undefined ? "" : txPlanoDateToInput(get("fecha"));
+        if (!fecha) {
+          rowWarnings.push("Sin fecha valida, se uso la fecha actual");
+        }
+
+        txCreatePlanRow({
+          fecha,
+          id_cliente: cliente ? String(cliente.id_cliente) : "",
+          cliente_nit: cliente ? cliente.identificacion : nit,
+          id_venta: venta ? String(venta.id_venta) : "",
+          valor,
+          moneda: ["COP", "USD", "EUR", "PAB"].includes(monedaRaw) ? monedaRaw : "",
+          id_banco: idBanco,
+          referencia,
+          descripcion,
+          comisiones
+        });
+
+        created++;
+
+        if (rowWarnings.length) {
+          flagged++;
+          txMarkRowError(txPlanBody.lastElementChild, true);
+          warnings.push(`Fila ${i + 1} del plano: ${rowWarnings.join("; ")}`);
+        }
+      }
+
+      if (!created) {
+        txResetPlanRows(3);
+        if (txPlanoStatus) {
+          txPlanoStatus.textContent = "El plano no tiene filas con datos.";
+        }
+        return;
+      }
+
+      if (txPlanoStatus) {
+        txPlanoStatus.textContent = `Plano cargado: ${created} filas${flagged ? `, ${flagged} con observaciones (marcadas en rojo). Revsalas antes de guardar.` : ", todas resueltas correctamente."}`;
+      }
+
+      if (warnings.length) {
+        console.warn("Subir plano:", warnings);
+      }
+
+      txUpdatePlanPreview();
+    } catch (error) {
+      if (txPlanoStatus) {
+        txPlanoStatus.textContent = `Error al leer el plano: ${error.message}`;
+      }
+      showToast({ title: "Error al leer el plano", subtitle: error.message, icon: "error" });
+    }
+  };
+
+  txSubirPlanoButton?.addEventListener("click", () => txPlanoInput?.click());
+
+  txPlanoInput?.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    await txLoadPlanoFile(file);
+  });
+
+  txDescargarPlantillaButton?.addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.href = apiUrl("/api/transacciones/plantilla");
+    link.download = "Plantilla modulo transacciones.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   });
 
   txCancelModalButton?.addEventListener("click", () => {

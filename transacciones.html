@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sistema Cartera | Transacciones</title>
+    <link rel="icon" type="image/png" href="Logo_syp_original.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -36,7 +37,7 @@
       <aside class="sidebar">
         <div>
           <div class="brand">
-            <div class="brand-mark">SC</div>
+            <img class="brand-mark" src="Logo_syp_blanco.png" alt="Logo SYP">
             <div>
               <p class="brand-title">Sistema Cartera</p>
               <p class="brand-subtitle">Panel operativo</p>
@@ -218,9 +219,19 @@
               <span class="material-symbols-outlined">delete_sweep</span>
               Limpiar
             </button>
+            <button class="btn-secondary" type="button" id="tx-subir-plano">
+              <span class="material-symbols-outlined">upload_file</span>
+              Subir plano
+            </button>
+            <button class="btn-secondary" type="button" id="tx-descargar-plantilla">
+              <span class="material-symbols-outlined">download</span>
+              Descargar plantilla
+            </button>
+            <input id="tx-plano-input" type="file" accept=".xlsx,.xls" hidden />
           </div>
           <p id="tx-plan-status">Prepara las filas y luego guarda en base de datos.</p>
         </div>
+        <p id="tx-plano-status" style="margin: 0 0 0.75rem 0; font-size: 0.82rem; color: #56708a;"></p>
 
         <div class="tx-plan-total" aria-live="polite">
           <p class="tx-plan-total-label">Total listo para guardar</p>

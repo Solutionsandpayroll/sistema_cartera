@@ -54,12 +54,8 @@ body {
 .brand-mark {
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: 0.75rem;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  color: #fefefe;
-  background: linear-gradient(135deg, var(--accent), #ff4977);
+  object-fit: contain;
+
 }
 
 .brand-title {

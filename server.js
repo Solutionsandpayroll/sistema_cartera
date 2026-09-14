@@ -1503,6 +1503,105 @@ app.get("/api/bancos", async (req, res) => {
 });
 
 /**
+ * GET /api/transacciones/plantilla
+ * Genera la plantilla Excel del modulo de transacciones con listas desplegables
+ * (Cliente, NIT cliente, Moneda, Banco) alimentadas por la base de datos al momento de la descarga.
+ */
+app.get("/api/transacciones/plantilla", async (req, res) => {
+  try {
+    const [clientesResult, bancosResult, monedasResult] = await Promise.all([
+      pool.query("SELECT identificacion, nombre FROM cliente ORDER BY nombre ASC, identificacion ASC"),
+      pool.query("SELECT nombre FROM banco ORDER BY nombre ASC"),
+      pool.query("SELECT codigo FROM moneda ORDER BY codigo ASC").catch(() => ({ rows: [] }))
+    ]);
+
+    const monedas = monedasResult.rows.length
+      ? monedasResult.rows.map((row) => row.codigo)
+      : ["COP", "USD", "EUR", "PAB"];
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Sistema Cartera";
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet("Hoja1");
+    const headers = [
+      "Fecha",
+      "Cliente",
+      "NIT cliente",
+      "Venta destino",
+      "Valor",
+      "Moneda",
+      "Banco",
+      "Referencia",
+      "Descripcion",
+      "Comisiones"
+    ];
+    const headerRow = worksheet.addRow(headers);
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF102A47" } };
+    headerRow.alignment = { vertical: "middle" };
+
+    const widths = [18, 34, 16, 16, 14, 10, 18, 18, 32, 12];
+    widths.forEach((width, index) => {
+      worksheet.getColumn(index + 1).width = width;
+    });
+    worksheet.getColumn(1).numFmt = "yyyy-mm-dd hh:mm";
+    worksheet.views = [{ state: "frozen", ySplit: 1 }];
+
+    // Hoja oculta con las fuentes de datos de los desplegables
+    const listas = workbook.addWorksheet("Listas", { state: "hidden" });
+    listas.getCell("A1").value = "Clientes";
+    listas.getCell("B1").value = "NITs";
+    listas.getCell("C1").value = "Monedas";
+    listas.getCell("D1").value = "Bancos";
+    [listas.getCell("A1"), listas.getCell("B1"), listas.getCell("C1"), listas.getCell("D1")].forEach((cell) => {
+      cell.font = { bold: true };
+    });
+
+    clientesResult.rows.forEach((cliente, index) => {
+      listas.getCell(`A${index + 2}`).value = String(cliente.nombre || "");
+      const nitCell = listas.getCell(`B${index + 2}`);
+      nitCell.value = String(cliente.identificacion || "");
+      nitCell.numFmt = "@";
+    });
+    monedas.forEach((codigo, index) => {
+      listas.getCell(`C${index + 2}`).value = String(codigo);
+    });
+    bancosResult.rows.forEach((banco, index) => {
+      listas.getCell(`D${index + 2}`).value = String(banco.nombre);
+    });
+
+    const clientesEnd = Math.max(clientesResult.rows.length + 1, 2);
+    const monedasEnd = Math.max(monedas.length + 1, 2);
+    const bancosEnd = Math.max(bancosResult.rows.length + 1, 2);
+
+    const makeListValidation = (range) => ({
+      type: "list",
+      allowBlank: true,
+      formulae: [range],
+      showErrorMessage: true,
+      errorStyle: "warning",
+      errorTitle: "Valor fuera de lista",
+      error: "Este valor no esta en las opciones registradas. Puedes conservarlo, pero revisalo: el sistema lo marcara para correccion al subir el plano."
+    });
+
+    const MAX_DATA_ROWS = 500;
+    for (let rowNumber = 2; rowNumber <= MAX_DATA_ROWS; rowNumber++) {
+      worksheet.getCell(`B${rowNumber}`).dataValidation = makeListValidation(`Listas!$A$2:$A$${clientesEnd}`);
+      worksheet.getCell(`C${rowNumber}`).dataValidation = makeListValidation(`Listas!$B$2:$B$${clientesEnd}`);
+      worksheet.getCell(`F${rowNumber}`).dataValidation = makeListValidation(`Listas!$C$2:$C$${monedasEnd}`);
+      worksheet.getCell(`G${rowNumber}`).dataValidation = makeListValidation(`Listas!$D$2:$D$${bancosEnd}`);
+    }
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=Plantilla-modulo-transacciones.xlsx");
+    await workbook.xlsx.write(res);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * GET /api/transacciones/:id/detalle
  * Retorna detalle completo de una transacción con sus aplicaciones
  */
@@ -2585,6 +2684,96 @@ app.get("/api/reportes/filtros-disponibles", async (req, res) => {
 });
 
 /**
+ * Transacciones sin venta asociada (saldo a favor sin aplicar).
+ * Se devuelven con la misma forma que las filas del reporte de ventas
+ * para poder listarlas junto a ellas; llevan es_transaccion = true.
+ */
+const getTransaccionesSinVenta = async ({ cliente_id, moneda, fecha_inicio, fecha_fin }) => {
+  const params = [];
+  const valorEfectivo = `
+    CASE
+      WHEN COALESCE(t.moneda_referencia, '') = 'COP' AND COALESCE(t.moneda, '') <> 'COP'
+        THEN COALESCE(t.valor_equivalente, t.valor)
+      ELSE t.valor
+    END`;
+
+  let sql = `
+    SELECT
+      t.id_transaccion,
+      t.id_cliente,
+      c.nombre AS cliente_nombre,
+      c.identificacion AS cliente_nit,
+      t.fecha AS fecha_elaboracion,
+      '-' AS fecha_vencimiento,
+      '-' AS comprobante,
+      '-' AS tipo_transaccion,
+      COALESCE(t.moneda, 'COP') AS moneda,
+      '-' AS total,
+      0::NUMERIC(15,2) AS total_aplicado,
+      (-1 * (${valorEfectivo}))::NUMERIC(15,2) AS saldo_venta,
+      '-' AS estado_envio_correo,
+      '-' AS transacciones_asociadas,
+      '-' AS fechas_transacciones,
+      COALESCE(b.nombre, 'Sin banco') AS bancos_relacionados
+    FROM transaccion t
+    JOIN cliente c ON c.id_cliente = t.id_cliente
+    LEFT JOIN banco b ON b.id_banco = t.id_banco
+    WHERE NOT EXISTS (SELECT 1 FROM aplicacion_pago a WHERE a.id_transaccion = t.id_transaccion)
+      AND (${valorEfectivo}) > 0
+  `;
+
+  if (cliente_id) {
+    sql += ` AND t.id_cliente = $${params.length + 1}`;
+    params.push(parseInt(cliente_id, 10));
+  }
+  if (moneda) {
+    sql += ` AND COALESCE(t.moneda, 'COP') = $${params.length + 1}`;
+    params.push(moneda);
+  }
+  if (fecha_inicio) {
+    sql += ` AND DATE(t.fecha) >= $${params.length + 1}`;
+    params.push(fecha_inicio);
+  }
+  if (fecha_fin) {
+    sql += ` AND DATE(t.fecha) <= $${params.length + 1}`;
+    params.push(fecha_fin);
+  }
+
+  sql += ` ORDER BY c.nombre ASC, t.fecha ASC, t.id_transaccion ASC`;
+
+  const result = await pool.query(sql, params);
+  return result.rows.map((row) => ({ ...row, es_transaccion: true }));
+};
+
+/**
+ * Intercala las transacciones sin venta al final del bloque de cada cliente.
+ * Requiere ambos arreglos ordenados por nombre de cliente (como salen de sus queries).
+ */
+const mergeVentasConTransaccionesSinVenta = (ventas, transacciones) => {
+  const norm = (value) =>
+    String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+  const out = [];
+  let vi = 0;
+  let ti = 0;
+
+  while (vi < ventas.length && ti < transacciones.length) {
+    if (norm(transacciones[ti].cliente_nombre) < norm(ventas[vi].cliente_nombre)) {
+      out.push(transacciones[ti++]);
+    } else {
+      out.push(ventas[vi++]);
+    }
+  }
+  while (vi < ventas.length) out.push(ventas[vi++]);
+  while (ti < transacciones.length) out.push(transacciones[ti++]);
+
+  return out;
+};
+
+/**
  * GET /api/reportes/datos
  * Retorna datos de ventas y transacciones con filtros aplicados
  * Query params: cliente_id, moneda, tipo, estado, fecha_inicio, fecha_fin, tipo_dato (ventas|transacciones|ambos)
@@ -2605,6 +2794,7 @@ app.get("/api/reportes/datos", async (req, res) => {
 
     let ventasData = [];
     let transaccionesData = [];
+    let transaccionesSinVentaData = [];
 
     // Construcción de filtros para ventas
     if (tipo_dato === "ventas" || tipo_dato === "ambos") {
@@ -2623,7 +2813,10 @@ app.get("/api/reportes/datos", async (req, res) => {
           v.total,
           v.moneda,
           COALESCE(ap_sum.total_aplicado, 0)::NUMERIC(15,2) AS total_aplicado,
-          (v.total - COALESCE(ap_sum.total_aplicado, 0))::NUMERIC(15,2) AS saldo_venta
+          (v.total - COALESCE(ap_sum.total_aplicado, 0))::NUMERIC(15,2) AS saldo_venta,
+          COALESCE(tx_rel.transacciones_asociadas, 'Sin aplicar') AS transacciones_asociadas,
+          COALESCE(tx_rel.fechas_transacciones, '-') AS fechas_transacciones,
+          COALESCE(tx_rel.bancos_relacionados, '-') AS bancos_relacionados
         FROM venta v
         JOIN cliente c ON v.id_cliente = c.id_cliente
         LEFT JOIN (
@@ -2631,6 +2824,27 @@ app.get("/api/reportes/datos", async (req, res) => {
           FROM aplicacion_pago
           GROUP BY id_venta
         ) ap_sum ON ap_sum.id_venta = v.id_venta
+        LEFT JOIN (
+          SELECT
+            a.id_venta,
+            STRING_AGG(DISTINCT (
+              'Tx #' || a.id_transaccion || ' (' ||
+              COALESCE(
+                NULLIF(TRIM(COALESCE(t.referencia, '')), ''),
+                NULLIF(TRIM(COALESCE(t.descripcion, '')), ''),
+                NULLIF(TRIM(COALESCE(t.nombre, '')), ''),
+                to_char(a.valor_aplicado, 'FM9999999999999.00') || ' ' || COALESCE(t.moneda, '')
+              ) || ' · ' || COALESCE(b.nombre, 'Sin banco') || ')'
+            ), ', ') AS transacciones_asociadas,
+            STRING_AGG(DISTINCT (
+              'Tx #' || a.id_transaccion || ' · ' || to_char(t.fecha AT TIME ZONE 'America/Bogota', 'DD/MM/YYYY')
+            ), ', ') AS fechas_transacciones,
+            STRING_AGG(DISTINCT COALESCE(b.nombre, 'Sin banco'), ', ') AS bancos_relacionados
+          FROM aplicacion_pago a
+          JOIN transaccion t ON t.id_transaccion = a.id_transaccion
+          LEFT JOIN banco b ON b.id_banco = t.id_banco
+          GROUP BY a.id_venta
+        ) tx_rel ON tx_rel.id_venta = v.id_venta
         WHERE 1=1
       `;
 
@@ -2673,6 +2887,10 @@ app.get("/api/reportes/datos", async (req, res) => {
 
       const ventasResult = await pool.query(ventasQuery, ventasParams);
       ventasData = ventasResult.rows;
+
+      if (venta_estado_abono !== "completado") {
+        transaccionesSinVentaData = await getTransaccionesSinVenta({ cliente_id, moneda, fecha_inicio, fecha_fin });
+      }
     }
 
     // Construcción de filtros para transacciones
@@ -2754,6 +2972,7 @@ app.get("/api/reportes/datos", async (req, res) => {
       data: {
         ventas: ventasData,
         transacciones: transaccionesData,
+        transacciones_sin_venta: transaccionesSinVentaData,
         total_ventas: ventasData.length,
         total_transacciones: transaccionesData.length
       }
@@ -3181,7 +3400,10 @@ app.get("/api/reportes/export", async (req, res) => {
           v.total,
           COALESCE(ap_sum.total_aplicado, 0)::NUMERIC(15,2) AS total_aplicado,
           (v.total - COALESCE(ap_sum.total_aplicado, 0))::NUMERIC(15,2) AS saldo_venta,
-          v.estado_envio_correo
+          v.estado_envio_correo,
+          COALESCE(tx_rel.transacciones_asociadas, 'Sin aplicar') AS transacciones_asociadas,
+          COALESCE(tx_rel.fechas_transacciones, '-') AS fechas_transacciones,
+          COALESCE(tx_rel.bancos_relacionados, '-') AS bancos_relacionados
         FROM venta v
         JOIN cliente c ON v.id_cliente = c.id_cliente
         LEFT JOIN (
@@ -3189,6 +3411,27 @@ app.get("/api/reportes/export", async (req, res) => {
           FROM aplicacion_pago
           GROUP BY id_venta
         ) ap_sum ON ap_sum.id_venta = v.id_venta
+        LEFT JOIN (
+          SELECT
+            a.id_venta,
+            STRING_AGG(DISTINCT (
+              'Tx #' || a.id_transaccion || ' (' ||
+              COALESCE(
+                NULLIF(TRIM(COALESCE(t.referencia, '')), ''),
+                NULLIF(TRIM(COALESCE(t.descripcion, '')), ''),
+                NULLIF(TRIM(COALESCE(t.nombre, '')), ''),
+                to_char(a.valor_aplicado, 'FM9999999999999.00') || ' ' || COALESCE(t.moneda, '')
+              ) || ' · ' || COALESCE(b.nombre, 'Sin banco') || ')'
+            ), ', ') AS transacciones_asociadas,
+            STRING_AGG(DISTINCT (
+              'Tx #' || a.id_transaccion || ' · ' || to_char(t.fecha AT TIME ZONE 'America/Bogota', 'DD/MM/YYYY')
+            ), ', ') AS fechas_transacciones,
+            STRING_AGG(DISTINCT COALESCE(b.nombre, 'Sin banco'), ', ') AS bancos_relacionados
+          FROM aplicacion_pago a
+          JOIN transaccion t ON t.id_transaccion = a.id_transaccion
+          LEFT JOIN banco b ON b.id_banco = t.id_banco
+          GROUP BY a.id_venta
+        ) tx_rel ON tx_rel.id_venta = v.id_venta
         WHERE 1=1
       `;
 
@@ -3230,6 +3473,14 @@ app.get("/api/reportes/export", async (req, res) => {
 
       const ventasResult = await pool.query(ventasQuery, ventasParams);
       data.ventas = ventasResult.rows;
+
+      if (venta_estado_abono !== "completado") {
+        const sinVenta = await getTransaccionesSinVenta({ cliente_id, moneda, fecha_inicio, fecha_fin });
+        data.ventas = mergeVentasConTransaccionesSinVenta(
+          data.ventas,
+          sinVenta.map((r) => ({ ...r, id_venta: `Tx #${r.id_transaccion}` }))
+        );
+      }
     }
 
     if (tipo_dato === "transacciones" || tipo_dato === "ambos") {
@@ -3316,7 +3567,10 @@ app.get("/api/reportes/export", async (req, res) => {
             "moneda",
             "total",
             "total_aplicado",
-            "estado_envio_correo"
+            "estado_envio_correo",
+            "transacciones_asociadas",
+            "fechas_transacciones",
+            "bancos_relacionados"
           ]
         : [
             "id_transaccion",
@@ -3383,7 +3637,10 @@ app.get("/api/reportes/export", async (req, res) => {
         "Moneda",
         "Total",
         "Aplicado",
-        "Estado"
+        "Estado",
+        "Transacciones relacionadas",
+        "Fechas de transacciones",
+        "Bancos"
       ];
 
       if (includeSaldos) {
@@ -3402,11 +3659,12 @@ app.get("/api/reportes/export", async (req, res) => {
           v.comprobante,
           v.tipo_transaccion,
           v.moneda,
-          Number(v.total),
+          v.es_transaccion ? '-' : Number(v.total),
           Number(v.total_aplicado)
         ];
         if (includeSaldos) row.push(Number(v.saldo_venta));
         row.push(v.estado_envio_correo);
+        row.push(v.transacciones_asociadas, v.fechas_transacciones, v.bancos_relacionados);
         ws.addRow(row);
       });
 
