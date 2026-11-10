@@ -270,6 +270,62 @@ const parseVentasSheet = (worksheet) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Paginación en cliente (compartida) ───────────────────────────────────────
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
+
+const paginateSlice = (rows, page) => {
+  const total = rows.length;
+  const size = page.size;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  if (page.current > totalPages) page.current = totalPages;
+  if (page.current < 1) page.current = 1;
+  const start = (page.current - 1) * size;
+  return { slice: rows.slice(start, start + size), total, totalPages };
+};
+
+const buildPagerHtml = ({ total, current, size, totalPages }) => {
+  const from = total === 0 ? 0 : (current - 1) * size + 1;
+  const to = total === 0 ? 0 : Math.min(current * size, total);
+  const sizeOptions = PAGE_SIZE_OPTIONS.map((opt) =>
+    `<option value="${opt}"${opt === size ? " selected" : ""}>${opt}</option>`
+  ).join("");
+  return `
+    <div class="pagination-info">Mostrando <strong>${from}</strong>–<strong>${to}</strong> de <strong>${total}</strong></div>
+    <div class="pagination-controls">
+      <label class="pagination-size">Por página
+        <select data-pager-action="size" aria-label="Filas por página">${sizeOptions}</select>
+      </label>
+      <button type="button" class="pager-btn" data-pager-action="first" ${current <= 1 ? "disabled" : ""} aria-label="Primera página"><span class="material-symbols-outlined">first_page</span></button>
+      <button type="button" class="pager-btn" data-pager-action="prev" ${current <= 1 ? "disabled" : ""} aria-label="Página anterior"><span class="material-symbols-outlined">chevron_left</span></button>
+      <span class="pagination-page">Página <strong>${current}</strong> de <strong>${totalPages}</strong></span>
+      <button type="button" class="pager-btn" data-pager-action="next" ${current >= totalPages ? "disabled" : ""} aria-label="Página siguiente"><span class="material-symbols-outlined">chevron_right</span></button>
+      <button type="button" class="pager-btn" data-pager-action="last" ${current >= totalPages ? "disabled" : ""} aria-label="Última página"><span class="material-symbols-outlined">last_page</span></button>
+    </div>`;
+};
+
+const wirePagerContainer = (container, page, renderPage) => {
+  if (!container) return;
+  container.addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-pager-action]");
+    if (!btn) return;
+    const action = btn.getAttribute("data-pager-action");
+    const totalPages = Math.max(1, Math.ceil((page._total || 0) / page.size));
+    if (action === "first") page.current = 1;
+    else if (action === "prev") page.current = Math.max(1, page.current - 1);
+    else if (action === "next") page.current = Math.min(totalPages, page.current + 1);
+    else if (action === "last") page.current = totalPages;
+    else return;
+    renderPage();
+  });
+  container.addEventListener("change", (event) => {
+    const sel = event.target.closest("select[data-pager-action='size']");
+    if (!sel) return;
+    page.size = Number.parseInt(sel.value, 10) || page.size;
+    page.current = 1;
+    renderPage();
+  });
+};
+
 const ventasPage = document.getElementById("ventas-page");
 
 if (ventasPage) {
@@ -279,6 +335,8 @@ if (ventasPage) {
     previewRows: [],
     previewFilter: "all",
     records: [],
+    filtered: [],
+    page: { current: 1, size: 25 },
     dueDatesMap: new Map(),
     salesFileName: "",
     dueDatesFileName: ""
@@ -329,6 +387,7 @@ if (ventasPage) {
 
   const tableHead = document.getElementById("ventas-table-head");
   const tableBody = document.getElementById("ventas-table-body");
+  const ventasPagination = document.getElementById("ventas-pagination");
 
   const globalFilter = document.getElementById("ventas-filter-global");
   const ventasReadOnlyColumns = new Set(["ID Venta", "Aplicado", "Saldo"]);
@@ -1171,15 +1230,34 @@ if (ventasPage) {
     }
   };
 
-  const applyFilters = () => {
+  const ventasGetFiltered = () => {
     const queryGlobal = normalizeKey(globalFilter?.value);
 
-    const filtered = state.records.filter((row) => {
+    return state.records.filter((row) => {
       const valuesText = normalizeKey(Object.values(row).join(" "));
       return !queryGlobal || valuesText.includes(queryGlobal);
     });
+  };
 
-    renderVentasMainTable(filtered);
+  const ventasRenderPage = () => {
+    const { slice, total, totalPages } = paginateSlice(state.filtered, state.page);
+    state.page._total = total;
+    renderVentasMainTable(slice);
+
+    if (ventasPagination) {
+      ventasPagination.innerHTML = buildPagerHtml({
+        total,
+        current: state.page.current,
+        size: state.page.size,
+        totalPages
+      });
+    }
+  };
+
+  const applyFilters = (resetPage) => {
+    state.filtered = ventasGetFiltered();
+    if (resetPage === true) state.page.current = 1;
+    ventasRenderPage();
   };
 
   const refreshKpis = () => {
@@ -1724,9 +1802,22 @@ if (ventasPage) {
         tx.textContent = `#${a.id_transaccion} - ${a.transaccion_nombre || a.referencia || "-"}`;
         const valor = document.createElement("td");
         valor.textContent = Number(a.valor_aplicado).toFixed(2);
+        const accion = document.createElement("td");
+        accion.className = "history-action-col";
+        if (!isReadonly() && a.id_aplicacion) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "venta-saldo-action";
+          btn.textContent = "Desvincular";
+          btn.dataset.action = "unlink-app";
+          btn.dataset.aplicacionId = String(a.id_aplicacion);
+          btn.dataset.txId = String(a.id_transaccion);
+          accion.appendChild(btn);
+        }
         tr.appendChild(fecha);
         tr.appendChild(tx);
         tr.appendChild(valor);
+        tr.appendChild(accion);
         tr.classList.add('fade-in-up');
         historyBody.appendChild(tr);
       });
@@ -2118,8 +2209,49 @@ if (ventasPage) {
   }
 
   if (globalFilter) {
-    globalFilter.addEventListener("input", applyFilters);
+    globalFilter.addEventListener("input", () => applyFilters(true));
   }
+
+  wirePagerContainer(ventasPagination, state.page, ventasRenderPage);
+
+  const unlinkAplicacion = async (aplicacionId, txId) => {
+    if (!aplicacionId) return;
+    const ok = window.confirm(
+      `¿Desvincular la transacción #${txId} de esta venta?\n\n` +
+      "La transacción recupera su saldo positivo para volver a usarse y la venta recupera saldo pendiente."
+    );
+    if (!ok) return;
+
+    try {
+      const response = await apiFetch(`/api/aplicaciones/${encodeURIComponent(aplicacionId)}`, {
+        method: "DELETE"
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.message || `No fue posible desvincular (${response.status})`);
+      }
+
+      showToast({
+        title: "Aplicación desvinculada",
+        subtitle: `La transacción #${txId} vuelve a estar disponible como saldo positivo.`,
+        icon: "link_off"
+      });
+
+      await Promise.all([
+        openVentaDashboard(ventaDashboardCurrentId),
+        loadVentasFromDatabase()
+      ]);
+    } catch (error) {
+      alert(`Error desvinculando la aplicación: ${error.message}`);
+    }
+  };
+
+  const ventaHistoryBodyEl = document.getElementById("venta-history-body");
+  ventaHistoryBodyEl?.addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-action='unlink-app']");
+    if (!btn) return;
+    unlinkAplicacion(btn.getAttribute("data-aplicacion-id"), btn.getAttribute("data-tx-id"));
+  });
 
   // Manejadores para cerrar modal de resultados
   const closeResultsButton = document.getElementById("close-results-button");
@@ -2229,7 +2361,9 @@ if (transaccionesPage) {
     clientesOptions: [],
     bancosOptions: [],
     ghosts: [],
-    records: []
+    records: [],
+    filtered: [],
+    page: { current: 1, size: 25 }
   };
 
   const txPlanBody = document.getElementById("tx-plan-body");
@@ -2248,6 +2382,7 @@ if (transaccionesPage) {
   const txGhostFilter = document.getElementById("tx-ghost-filter");
   const txTableHead = document.getElementById("tx-table-head");
   const txTableBody = document.getElementById("tx-table-body");
+  const txPagination = document.getElementById("tx-pagination");
   const txGhostCount = document.getElementById("tx-ghost-count");
   const txGhostTableBody = document.getElementById("tx-ghost-table-body");
   const txGhostModal = document.getElementById("tx-ghost-modal");
@@ -3573,9 +3708,24 @@ if (transaccionesPage) {
     }
   };
 
-  const txApplyFilter = () => {
+  const txRenderTxPage = () => {
+    const { slice, total, totalPages } = paginateSlice(txState.filtered, txState.page);
+    txState.page._total = total;
+    txRenderTable(slice);
+
+    if (txPagination) {
+      txPagination.innerHTML = buildPagerHtml({
+        total,
+        current: txState.page.current,
+        size: txState.page.size,
+        totalPages
+      });
+    }
+  };
+
+  const txApplyFilter = (resetPage) => {
     const query = txNormalize(txFilterGlobal?.value || "");
-    const filtered = txState.records.filter((row) => {
+    txState.filtered = txState.records.filter((row) => {
       if (!query) return true;
 
       const haystack = txNormalize(
@@ -3597,13 +3747,12 @@ if (transaccionesPage) {
           .join(" ")
       );
 
-      const passQuery = !query || haystack.includes(query);
-
-      return passQuery;
+      return haystack.includes(query);
     });
 
-    txRenderTable(filtered);
-    txRefreshKpis(filtered);
+    if (resetPage === true) txState.page.current = 1;
+    txRenderTxPage();
+    txRefreshKpis(txState.filtered);
   };
 
   const txLoadVentasOptions = async () => {
@@ -3998,7 +4147,9 @@ if (transaccionesPage) {
     closeModal();
   });
 
-  txFilterGlobal?.addEventListener("input", txApplyFilter);
+  txFilterGlobal?.addEventListener("input", () => txApplyFilter(true));
+
+  wirePagerContainer(txPagination, txState.page, txRenderTxPage);
 
   txCloseResultsButton?.addEventListener("click", txCloseResults);
   txResultsOkButton?.addEventListener("click", txCloseResults);

@@ -2782,3 +2782,105 @@ html.is-readonly #ventas-apply-import,
 html.is-readonly #ventas-clear-preview {
   display: none !important;
 }
+
+/* ── Paginación en cliente ──────────────────────────────────────────────────── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding: 0.75rem 0.25rem 0.25rem;
+  border-top: 1px solid #e6eef7;
+}
+
+.pagination:empty {
+  display: none;
+}
+
+.pagination-info {
+  font-size: 0.85rem;
+  color: #56708a;
+}
+
+.pagination-info strong {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pagination-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: #56708a;
+}
+
+.pagination-size select {
+  border: 1px solid #dce4ed;
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  background: #fff;
+  color: #304763;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pagination-page {
+  font-size: 0.85rem;
+  color: #56708a;
+  min-width: 8.5rem;
+  text-align: center;
+}
+
+.pagination-page strong {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid #dce4ed;
+  border-radius: 0.55rem;
+  background: #fff;
+  color: var(--primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #fff3f7;
+}
+
+.pager-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pager-btn .material-symbols-outlined {
+  font-size: 1.25rem;
+}
+
+/* Desvincular aplicación (histórico del dashboard de venta) */
+#venta-history-table .history-action-col {
+  text-align: right;
+  white-space: nowrap;
+}
+
+html.is-readonly .history-action-col {
+  display: none !important;
+}

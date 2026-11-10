@@ -1298,7 +1298,6 @@ app.get("/api/transacciones", async (req, res) => {
         GROUP BY a.id_transaccion
       ) av ON av.id_transaccion = t.id_transaccion
       ORDER BY t.fecha DESC, t.id_transaccion DESC
-      LIMIT 500
     `);
 
     res.json({
@@ -1976,8 +1975,7 @@ app.get("/api/transacciones/fantasmas", async (req, res) => {
        LEFT JOIN venta v ON v.id_venta = tf.id_venta_resuelta
        LEFT JOIN transaccion t ON t.id_transaccion = tf.id_transaccion_resuelta
        ${whereSql}
-       ORDER BY tf.created_at DESC, tf.id_fantasma DESC
-       LIMIT 200`,
+        ORDER BY tf.created_at DESC, tf.id_fantasma DESC`,
       params
     );
 
@@ -2322,6 +2320,41 @@ app.post("/api/aplicaciones", async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   } finally {
     db.release();
+  }
+});
+
+/**
+ * DELETE /api/aplicaciones/:id
+ * Desvincula una aplicación de pago (elimina el vínculo transacción <-> venta).
+ * Como los saldos se recalculan desde SUM(aplicacion_pago), al borrar la fila:
+ * - la venta recupera saldo pendiente, y
+ * - la transacción recupera su saldo positivo y vuelve a quedar disponible para aplicar.
+ */
+app.delete("/api/aplicaciones/:id", async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ success: false, message: "id invalido" });
+  }
+
+  try {
+    const existsRes = await pool.query(
+      "SELECT id_aplicacion, id_transaccion, id_venta FROM aplicacion_pago WHERE id_aplicacion = $1",
+      [id]
+    );
+    if (!existsRes.rows.length) {
+      return res.status(404).json({ success: false, message: "Aplicación no encontrada" });
+    }
+
+    const { id_transaccion, id_venta } = existsRes.rows[0];
+
+    await pool.query("DELETE FROM aplicacion_pago WHERE id_aplicacion = $1", [id]);
+
+    res.json({
+      success: true,
+      data: { id_aplicacion: id, id_transaccion, id_venta }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
